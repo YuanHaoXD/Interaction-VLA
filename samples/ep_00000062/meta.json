@@ -1,0 +1,19 @@
+{
+ "episode_id": "ep_00000062",
+ "source": "synthetic_v1",
+ "duration_s": 35.906,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "tilt_head",
+   "t": 7.4
+  },
+  {
+   "label": "nod",
+   "t": 21.1
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}

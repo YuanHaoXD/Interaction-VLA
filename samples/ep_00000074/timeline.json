@@ -1,0 +1,14 @@
+[
+ {
+  "t": 11.8,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 13.8,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "tilt_head"
+ }
+]

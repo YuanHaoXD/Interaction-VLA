@@ -1,0 +1,23 @@
+{
+ "episode_id": "ep_00000094",
+ "source": "synthetic_v1",
+ "duration_s": 32.174,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "nod",
+   "t": 9.9
+  },
+  {
+   "label": "shake_head",
+   "t": 18.4
+  },
+  {
+   "label": "shake_head",
+   "t": 21.7
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}

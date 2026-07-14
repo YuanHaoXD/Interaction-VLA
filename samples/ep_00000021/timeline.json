@@ -1,0 +1,38 @@
+[
+ {
+  "t": 12.7,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 14.5,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "shake_head"
+ },
+ {
+  "t": 16.8,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 17.3,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 19.1,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "none"
+ },
+ {
+  "t": 19.3,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "shake_head"
+ }
+]

@@ -1,0 +1,26 @@
+[
+ {
+  "t": 5.9,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 7.4,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "tilt_head"
+ },
+ {
+  "t": 19.1,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 21.1,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "nod"
+ }
+]

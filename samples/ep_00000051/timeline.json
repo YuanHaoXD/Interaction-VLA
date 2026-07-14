@@ -1,0 +1,26 @@
+[
+ {
+  "t": 4.7,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 6.1,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 6.7,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "nod"
+ },
+ {
+  "t": 8.7,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "none"
+ }
+]

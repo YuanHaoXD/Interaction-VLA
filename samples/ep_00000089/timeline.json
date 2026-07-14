@@ -1,0 +1,14 @@
+[
+ {
+  "t": 19.9,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 22.2,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "wiggle_antennas"
+ }
+]

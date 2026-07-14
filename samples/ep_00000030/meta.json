@@ -1,0 +1,19 @@
+{
+ "episode_id": "ep_00000030",
+ "source": "synthetic_v1",
+ "duration_s": 15.53,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "tilt_head",
+   "t": 3.5
+  },
+  {
+   "label": "tilt_head",
+   "t": 7.2
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}

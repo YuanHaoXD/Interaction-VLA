@@ -1,0 +1,19 @@
+{
+ "episode_id": "ep_00000053",
+ "source": "synthetic_v1",
+ "duration_s": 36.832,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "nod",
+   "t": 18.1
+  },
+  {
+   "label": "wiggle_antennas",
+   "t": 31.8
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}

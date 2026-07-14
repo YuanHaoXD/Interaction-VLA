@@ -1,0 +1,38 @@
+[
+ {
+  "t": 0.7,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 3.3,
+  "type": "response",
+  "text": "这个我不太同意。",
+  "est_speech_dur_s": 1.45,
+  "action_label": "nod"
+ },
+ {
+  "t": 6.8,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 8.3,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 9.1,
+  "type": "response",
+  "text": "这个我不太同意。",
+  "est_speech_dur_s": 1.45,
+  "action_label": "none"
+ },
+ {
+  "t": 10.1,
+  "type": "response",
+  "text": "哈哈,有意思!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "shake_head"
+ }
+]

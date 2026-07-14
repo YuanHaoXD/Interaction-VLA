@@ -1,0 +1,19 @@
+{
+ "episode_id": "ep_00000087",
+ "source": "synthetic_v1",
+ "duration_s": 37.487,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "wiggle_antennas",
+   "t": 13.3
+  },
+  {
+   "label": "wiggle_antennas",
+   "t": 22.0
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}

@@ -1,0 +1,14 @@
+[
+ {
+  "t": 4.6,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 7.0,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "wiggle_antennas"
+ }
+]

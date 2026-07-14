@@ -1,0 +1,10 @@
+{
+ "episode_id": "ep_00000028",
+ "source": "synthetic_v1",
+ "duration_s": 28.043,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [],
+ "origin_video": "sample",
+ "schema_version": 1
+}

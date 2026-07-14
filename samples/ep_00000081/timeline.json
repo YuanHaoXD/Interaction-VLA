@@ -1,0 +1,38 @@
+[
+ {
+  "t": 9.6,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 12.1,
+  "type": "response",
+  "text": "哈哈,有意思!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "nod"
+ },
+ {
+  "t": 15.3,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 18.0,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "tilt_head"
+ },
+ {
+  "t": 20.5,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 23.3,
+  "type": "response",
+  "text": "好的,没问题!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "tilt_head"
+ }
+]

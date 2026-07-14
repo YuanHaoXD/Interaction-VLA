@@ -1,0 +1,26 @@
+[
+ {
+  "t": 4.6,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 6.4,
+  "type": "response",
+  "text": "哈哈,有意思!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "none"
+ },
+ {
+  "t": 16.0,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 17.6,
+  "type": "response",
+  "text": "哈哈,有意思!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "none"
+ }
+]

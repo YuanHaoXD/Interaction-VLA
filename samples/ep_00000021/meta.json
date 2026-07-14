@@ -1,0 +1,19 @@
+{
+ "episode_id": "ep_00000021",
+ "source": "synthetic_v1",
+ "duration_s": 26.054,
+ "fps_action": 30,
+ "seed": 2026,
+ "template_events": [
+  {
+   "label": "shake_head",
+   "t": 14.5
+  },
+  {
+   "label": "shake_head",
+   "t": 19.3
+  }
+ ],
+ "origin_video": "sample",
+ "schema_version": 1
+}
