@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 .env
 
+# 测试缓存与临时目录
+.pytest_cache/
+.pytmp/
+
 # 大文件产物（数据集/权重/缓存的隐状态不入库，走服务器本地盘或对象存储）
 *.ckpt
 *.safetensors
