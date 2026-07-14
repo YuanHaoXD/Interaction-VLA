@@ -28,6 +28,7 @@ from pathlib import Path
 def locate_joyai() -> Optional[str]:
     """定位服务器上 JoyAI 模型路径"""
     candidates = [
+        "/cache/model/JoyAI-VL-Interaction-Preview",
         "/cache/model/JoyAI",
         "/home/ma-user/JoyAI",
         "/opt/JoyAI",
@@ -51,24 +52,25 @@ def load_joyai(model_path: Optional[str] = None):
         (model, processor) 元组
     """
     import torch
-    from transformers import AutoModelForCausalLM, AutoProcessor
+    from transformers import AutoProcessor
+    from transformers.models.qwen3_vl.modeling_qwen3_vl import Qwen3VLForConditionalGeneration
 
     path = model_path or locate_joyai()
     if path is None:
         raise RuntimeError(
             "JoyAI 模型路径未找到。请手动指定 model_path 或检查以下位置：\n"
+            "  - /cache/model/JoyAI-VL-Interaction-Preview\n"
             "  - /cache/model/JoyAI\n"
             "  - /home/ma-user/JoyAI\n"
             "  - ~/.cache/huggingface/hub/models--*JoyAI*"
         )
 
     print(f"加载 JoyAI 模型: {path}")
-    model = AutoModelForCausalLM.from_pretrained(
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         path,
         trust_remote_code=True,
         torch_dtype=torch.float16,
-        device_map="npu:0"
-    )
+    ).to("npu:0")
     processor = AutoProcessor.from_pretrained(path, trust_remote_code=True)
     print(f"✓ 模型加载完成，设备: {model.device}")
     return model, processor
@@ -153,6 +155,8 @@ def run_inference_test(model, processor, messages: List[Dict]):
     generated = processor.decode(outputs[0], skip_special_tokens=True)
     print(f"生成结果: {generated[:200]}...")
 
+    return inputs  # 返回 inputs 供吞吐测试使用
+
 
 def main():
     """主函数：定位、加载、测试"""
@@ -189,7 +193,7 @@ def main():
 
     # 4. 推理测试
     try:
-        run_inference_test(model, processor, messages)
+        inputs = run_inference_test(model, processor, messages)
 
         # 5. 吞吐测量
         print("\n=== 吞吐测试 ===")
