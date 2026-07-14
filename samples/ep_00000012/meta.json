@@ -19,5 +19,7 @@
   }
  ],
  "origin_video": "sample",
- "schema_version": 1
+ "schema_version": 1,
+ "d_model": 4096,
+ "n_decisions": 15
 }
