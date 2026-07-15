@@ -22,3 +22,6 @@ hidden_states_cache/
 # 渲染产物
 *.mp4
 !docs/**/*.mp4
+
+# NPU 算子副产物
+fusion_result.json
