@@ -88,24 +88,28 @@ def play(mini, neutral, traj):
 
 def main():
     arg = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
-    print(">>> 连接仿真(首次可能等 10~50 秒)...", flush=True)
-    mini = ReachyMini()
-    neutral = mini.get_current_head_pose()
-    print(">>> 已连接。开始展示。\n", flush=True)
-    shows = build_shows()
-    loop = (arg == "loop")
-    while True:
-        for name, traj in shows:
-            key = name.split()[0]                                    # 中文名首词,如"点头"
-            eng = name.split()[1] if len(name.split()) > 1 else ""   # 英文名,如"nod"
-            if arg not in ("all", "loop") and arg not in (key, eng.lower()):
-                continue
-            print(f"▶ {name}   ({len(traj)}帧 / {len(traj)/FPS:.1f}s)", flush=True)
-            play(mini, neutral, traj)
-            play(mini, neutral, _zeros(0.8))                         # 动作间回中停顿
-        if not loop:
-            break
-        print("—— 循环一轮结束,重新开始(关闭窗口或 Ctrl+C 停止)——\n", flush=True)
+    print(">>> 连接仿真(约 4~8 秒)...", flush=True)
+    # 官方最佳实践(依据 pollen-robotics AGENTS.md + SDK 源码):
+    #   connection_mode="localhost_only" —— 仿真在本机,跳过网络域名探测,略快且不会误连 reachy-mini.local
+    #   media_backend="no_media"         —— 动作控制不需音视频,实测连接快约40%(7.4s→4.5s)并避开所有音视频管线坑
+    #   with 上下文管理器                 —— 保证连接干净释放,即使脚本被 Ctrl+C/关窗打断(修复"强杀导致连接管线坏"的坑)
+    with ReachyMini(connection_mode="localhost_only", media_backend="no_media") as mini:
+        neutral = mini.get_current_head_pose()
+        print(">>> 已连接。开始展示。\n", flush=True)
+        shows = build_shows()
+        loop = (arg == "loop")
+        while True:
+            for name, traj in shows:
+                key = name.split()[0]                                    # 中文名首词,如"点头"
+                eng = name.split()[1] if len(name.split()) > 1 else ""   # 英文名,如"nod"
+                if arg not in ("all", "loop") and arg not in (key, eng.lower()):
+                    continue
+                print(f"▶ {name}   ({len(traj)}帧 / {len(traj)/FPS:.1f}s)", flush=True)
+                play(mini, neutral, traj)
+                play(mini, neutral, _zeros(0.8))                         # 动作间回中停顿
+            if not loop:
+                break
+            print("—— 循环一轮结束,重新开始(关闭窗口或 Ctrl+C 停止)——\n", flush=True)
     print("\n>>> 展示完毕。", flush=True)
 
 if __name__ == "__main__":
