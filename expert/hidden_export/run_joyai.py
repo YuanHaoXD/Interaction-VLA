@@ -28,6 +28,10 @@ from pathlib import Path
 def locate_joyai() -> Optional[str]:
     """定位服务器上 JoyAI 模型路径"""
     candidates = [
+        # 永久盘(11TB,重启不丢)——2026-07-15 实测权重在此,优先
+        "/home/ma-user/work/dataset/yh222/models/JoyAI-VL-Interaction-Preview",
+        # /cache 是易失大盘(重启即丢),仅作镜像回退
+        "/cache/hf/hub/models--jdopensource--JoyAI-VL-Interaction-Preview/snapshots",
         "/cache/model/JoyAI-VL-Interaction-Preview",
         "/cache/model/JoyAI",
         "/home/ma-user/JoyAI",
@@ -116,15 +120,21 @@ def build_second_by_second_messages(timeline: List[Dict], frames_dir: Optional[s
         if user_texts:
             content.extend([{"type": "text", "text": t} for t in user_texts])
 
-        if content:
-            messages.append({"role": "user", "content": content})
+        # JoyAI 训练格式:每秒一对 user/assistant,严格交替。
+        # 即使该秒无帧无用户文本,也补一个占位 user(否则序列会 user/assistant 错位,
+        # 且 A3 按 assistant 决策 token 定位时无法对齐每秒)。
+        if not content:
+            content = [{"type": "text", "text": f"<{sec} seconds>"}]
+        messages.append({"role": "user", "content": content})
 
         # assistant 响应（该秒内的 response 或 silence）
+        # 决策 token 语义(设计文档 §3.3):有回复 → </response>+文本;沉默 → </silence>。
+        # A3 隐状态预计算按 </response>(151670)/</silence>(151669) 这两个决策 token 的位置切片,
+        # 故此处**必须**带决策 token 前缀,否则决策 token 不出现在序列里。
         resp = [e for e in response_events if sec <= e["t"] < sec + 1]
         if resp:
-            # 有回复
             texts = [e["text"] for e in resp]
-            content = [{"type": "text", "text": "\n".join(texts)}]
+            content = [{"type": "text", "text": "</response>" + "\n".join(texts)}]
             messages.append({"role": "assistant", "content": content})
         else:
             # 沉默
