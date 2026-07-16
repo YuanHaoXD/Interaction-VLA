@@ -25,3 +25,7 @@ hidden_states_cache/
 
 # NPU 算子副产物
 fusion_result.json
+
+# 标注流水线的产物与日志（代码入库,产物不入）
+annotation/annotated/
+annotation/api_logs/
