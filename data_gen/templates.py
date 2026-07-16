@@ -1,7 +1,7 @@
 # data_gen/templates.py —— 5 类标签的参数随机化连续轨迹 + idle 微动 + backchannel
 import numpy as np
 
-FPS = 30
+FPS = 50   # v1.3 起 30→50Hz(对齐官方动作库原生频率;每步位移=max_vel/FPS)
 # 维度索引: 0x 1y 2z 3roll 4pitch 5yaw 6body_yaw 7ant_r 8ant_l
 
 def _T(duration_s): return int(round(duration_s * FPS))

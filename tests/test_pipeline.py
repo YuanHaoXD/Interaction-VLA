@@ -7,11 +7,11 @@ import numpy as np
 from data_gen.pipeline import convert_sample, run_pipeline, est_dur
 from data_gen.schema import validate_episode
 from data_gen.stats import aggregate
+from data_gen.templates import FPS
 
 ROOT = pathlib.Path(__file__).parent.parent
 LIMITS = json.loads((ROOT / "sim" / "limits.json").read_text(encoding="utf-8"))
 ANNO = json.loads((ROOT / "data_gen" / "example_annotation.json").read_text(encoding="utf-8"))
-FPS = 30
 
 
 def _first_sample():
@@ -40,7 +40,7 @@ def test_convert_sample_action_shape_and_validate(tmp_path):
     rng = np.random.default_rng(1)
     meta, timeline, actions = convert_sample(s, rng, LIMITS)
 
-    # actions 形状 = duration 秒数 × 30，9 维 float32
+    # actions 形状 = duration 秒数 × FPS(50Hz),9 维 float32
     T = int(round(meta["duration_s"] * FPS))
     assert actions.shape == (T, 9)
     assert actions.dtype == np.float32

@@ -1,4 +1,4 @@
-# sim/probe_action_space.py —— 动作空间勘察:逐维扫限位 + 30Hz 压测
+# sim/probe_action_space.py —— 动作空间勘察:逐维扫限位 + 50Hz 压测
 import os
 os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
 import time, json
@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 from reachy_mini import ReachyMini
 
 DIMS = ["x","y","z","roll","pitch","yaw","body_yaw","ant_right","ant_left"]
-DT = 1.0 / 30.0
+DT = 1.0 / 50.0   # v1.3:30→50Hz
 
 def pose_mat(neutral, x,y,z,roll,pitch,yaw):
     d = np.eye(4); d[:3,:3] = R.from_euler("xyz",[roll,pitch,yaw]).as_matrix(); d[:3,3] = [x,y,z]
@@ -41,7 +41,7 @@ def sweep_dim(mini, neutral, neutral_inv, i, step, max_abs, err_tol):
     return bounds[1], bounds[0]
 
 def rate_test(mini, neutral, seconds=30, freq=1.0, amp=0.17):
-    """pitch 正弦 30Hz 流,测实际循环频率与最大周期抖动。"""
+    """pitch 正弦 50Hz 流,测实际循环频率与最大周期抖动。"""
     n = int(seconds / DT); tics = []
     t0 = time.perf_counter()
     for k in range(n):
@@ -71,7 +71,7 @@ def main():
             print(f"{DIMS[i]:9s} safe range: [{lo:+.3f}, {hi:+.3f}]")
         mins.append(round(lo,4)); maxs.append(round(hi,4))
     rt = rate_test(mini, neutral)
-    print("30Hz 压测:", rt)
+    print("50Hz 压测:", rt)
     out = {"dim_names": DIMS, "safe_min": mins, "safe_max": maxs,
            "max_vel": [0.1,0.1,0.1,2.0,2.0,2.0,2.0,6.0,6.0], **rt}   # max_vel 初值,按报告修订
     with open(os.path.join(os.path.dirname(__file__),"limits.json"),"w",encoding="utf-8") as f:

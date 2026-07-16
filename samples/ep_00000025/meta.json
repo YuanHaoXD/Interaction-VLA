@@ -2,7 +2,7 @@
  "episode_id": "ep_00000025",
  "source": "synthetic_v1",
  "duration_s": 38.808,
- "fps_action": 30,
+ "fps_action": 50,
  "seed": 2026,
  "template_events": [],
  "origin_video": "sample",

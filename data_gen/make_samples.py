@@ -1,7 +1,7 @@
 # data_gen/make_samples.py —— 用模板库+schema 生成 100 段合成样例(无音频/无帧)
 import json, pathlib
 import numpy as np
-from data_gen.templates import compose
+from data_gen.templates import compose, FPS
 from data_gen.schema import write_episode, validate_episode
 
 ROOT = pathlib.Path(__file__).parent.parent
@@ -28,9 +28,12 @@ def main(n=100):
             timeline.append({"t": t, "type": "response", "text": text,
                              "est_speech_dur_s": est_dur(text), "action_label": label})
             if label != "none": events.append({"label": label, "t": t})
-        traj = compose(dur, events, spans, rng, LIMITS)
+        # 轨迹长度须与 meta 存的 duration_s 一致(schema 按 round(dur,3)*fps 校验)。
+        # 舍入放在 timeline 构建之后:t_resp/q_t 仍用原始 dur → timeline 与旧版逐字一致。
+        dur_r = round(dur, 3)
+        traj = compose(dur_r, events, spans, rng, LIMITS)
         meta = {"episode_id": f"ep_{i:08d}", "source": "synthetic_v1",
-                "duration_s": round(dur, 3), "fps_action": 30, "seed": 2026,
+                "duration_s": dur_r, "fps_action": FPS, "seed": 2026,
                 "template_events": events, "origin_video": "sample", "schema_version": 1}
         ep = ROOT/"samples"/meta["episode_id"]
         write_episode(ep, meta, sorted(timeline, key=lambda e: e["t"]), traj)

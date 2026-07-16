@@ -13,7 +13,7 @@
 核心函数 convert_sample(sample, rng, limits) -> (meta, timeline, actions):
   - question 时刻 → user_text 事件 + speech_spans(跨度 = est_dur(content))
   - 带 action 标签的 response → 模板事件 + response 时间线事件(含 est_speech_dur_s、action_label)
-  - compose() 生成 30Hz×9 维连续轨迹
+  - compose() 生成 50Hz×9 维连续轨迹(v1.3;fps 由 templates.FPS 统一)
   - duration = min(最后事件+5s, 视频长, 120s 上限)
 """
 
@@ -83,6 +83,7 @@ def convert_sample(sample: Dict, rng: np.random.Generator, limits: Dict
     duration_s = min(cand, video_dur) if video_dur > 0 else cand
     duration_s = min(duration_s, DUR_CAP_S)
     duration_s = max(duration_s, 1.0)
+    duration_s = round(duration_s, 3)   # 轨迹长度与 meta 一致(schema 按 round(dur,3)*fps 校验;50Hz 下舍入偏差会触发 off-by-one)
 
     timeline.sort(key=lambda e: e["t"])
 
@@ -92,7 +93,7 @@ def convert_sample(sample: Dict, rng: np.random.Generator, limits: Dict
     meta = {
         "episode_id": f"ep_{sample['video_id']}",
         "source": "synthetic_v1_from_annotation",
-        "duration_s": round(duration_s, 3),
+        "duration_s": duration_s,
         "fps_action": FPS,
         "seed": int(rng.integers(0, 2**31 - 1)),
         "template_events": events,

@@ -54,7 +54,7 @@ python -m data_gen.stats --data /cache/tmp/ds
 
 ## 架构大图（慢脑 + 快脑）
 
-核心思想：在冻结的 JoyAI-VL-Interaction 8B（**慢脑，1Hz 决策**）上外挂一个可训练的连续动作专家（**快脑，50–200M，30Hz**），让机器人在说话/聆听/沉默全程流畅输出拟人动作。
+核心思想：在冻结的 JoyAI-VL-Interaction 8B（**慢脑，1Hz 决策**）上外挂一个可训练的连续动作专家（**快脑，50–200M，50Hz**），让机器人在说话/聆听/沉默全程流畅输出拟人动作。
 
 ```
 用户文本 + 摄像头帧(≈1fps) ─▶ JoyAI 8B(慢脑,1Hz,冻结) ─▶ 文本回复
@@ -78,7 +78,7 @@ python -m data_gen.stats --data /cache/tmp/ds
 
 - `data_gen/` —— 数据构造。`templates.py`（5 类标签 nod/shake_head/tilt_head/wiggle_antennas/none → 参数随机化连续轨迹，含 idle 微动与 backchannel 点头；`compose()` 是总装：叠加事件轨迹后做限幅+逐步限速保证连续）；`schema.py`（C0 契约代码化）；`make_samples.py`（生成 100 段合成样例）。
 - `expert/hidden_export/` —— 慢脑侧。`run_joyai.py`（JoyAI transformers 慢路径加载/推理，加载方式抄官方 `services/webinfer`，**别自己发明**）；`precompute.py`（隐状态离线预计算，**精确版**：按决策 token id `</silence>`=151669/`</response>`=151670 定位，0.19s/段·卡，见 A3 报告 2026-07-15 修订）。
-- `sim/` —— 仿真与勘察（多为本机侧环境）。`replay_episode.py`（30Hz 回放到 MuJoCo，用官方最佳实践 `connection_mode="localhost_only"` + `media_backend="no_media"`）；`probe_action_space.py`（限位/频率勘察，产出 `limits.json`）；`_diag_*.py` 是连接模式排障脚本。
+- `sim/` —— 仿真与勘察（多为本机侧环境）。`replay_episode.py`（按 meta 的 `fps_action` 回放到 MuJoCo，50Hz；用官方最佳实践 `connection_mode="localhost_only"` + `media_backend="no_media"`）；`probe_action_space.py`（限位/频率勘察，产出 `limits.json`）；`_diag_*.py` 是连接模式排障脚本。
 - `tests/` —— pytest（TDD：先写失败测试再实现）。
 - `smoke/` —— NPU 冒烟测试（算子/DiT/StarVLA 兼容性）。
 - `docs/` —— `2026-07-14-交互VLA设计文档_zh.md`（权威设计）、`plans/`（分阶段任务书 + 服务器/本机执行提示词）、`experiments/`（每任务实验报告）。
