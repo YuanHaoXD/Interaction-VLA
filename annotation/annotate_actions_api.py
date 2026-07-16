@@ -19,8 +19,9 @@
 Q-R 配对: question[i] <-> response[i]，按位置一一对应，不依赖 time 字段。
 
 ── 相对原始交接文档做的修正（2026-07，落地时）──
-1. 默认模型改为 gemini-2.5-flash（原为 gemini-2.5-pro）：5 选 1 情感分类用 pro 又慢又贵，
+1. 默认模型改为 gemini-2.5-flash（原为 gemini-2.5-pro）：情感分类用 pro 又慢又贵，
    flash 质量足够、便宜快一个量级。可用 MODEL_NAME 环境变量覆盖。
+   （M1.5-C3 起标签集由旧 5 类升级为官方库 85 情绪动作 + none，见下方「动作词表 v2」。）
 2. 防"静默误标 none"：Gemini 2.5 系列是思考模型，若 max_tokens 被思考 token 吃光，会返回
    空 content（finish_reason == "length"），原脚本会把它无声兜底成 "none"，且统计看不出异常。
    本版检测空/截断返回 → 自动加大预算重试一次 → 仍失败的单独计为 "empty" 并在结尾醒目告警。
@@ -101,22 +102,64 @@ REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "").strip()
 # 避免对 ~580MB 大文件整文件 json.loads / 整文件重写 checkpoint。
 CHUNK_SAMPLES = int(os.environ.get("CHUNK_SAMPLES", "500"))
 
-ACTIONS = ("nod", "shake_head", "wiggle_antennas", "tilt_head", "none")
+ACTIONS = ("nod", "shake_head", "wiggle_antennas", "tilt_head", "none")  # 旧 5 类(下方 v2 覆盖)
+
+# ── 动作词表 v2(官方情绪动作库,M1.5-C3 起)──
+# 标签集由旧 5 类升级为官方动作库的 85 个情绪动作 + none。词表【程序化提取】自
+# ../data_gen/motion_library/index.json(kind=="emotion"),不手抄;舞蹈库(19 个 kind=="dance")
+# 默认排除;情绪库里的 dance1/2/3 保留,但仅在音乐/舞蹈语境启用(见 prompt 规则 5)。
+MOTION_LIBRARY_INDEX = (
+    Path(__file__).resolve().parent.parent / "data_gen" / "motion_library" / "index.json"
+)
+
+# 4 个补录动作官方只留了录制时间戳、无语义描述;按名义补最简英文注释
+# (本机 C3 自决,已在实验记录声明;不改动作本身,只为让 prompt 词条可读)。
+_DESC_OVERRIDE = {
+    "mini-deep-sleep": "Falls into a deep sleep / powered-down rest.",
+    "toc-toc-toc": "A knock-knock gesture, playfully knocking to get attention.",
+    "waiting": "Idly waiting for something to happen, with nothing to do.",
+    "wake-mini-up": "Waking up and booting back to life.",
+}
+
+
+def build_action_catalog(index_path=MOTION_LIBRARY_INDEX):
+    """从官方库 index.json 程序化提取 85 个情绪动作的 (name, description)。
+    返回 (names: tuple, catalog_lines: list[str])。"""
+    idx = json.loads(Path(index_path).read_text(encoding="utf-8"))
+    rows = []
+    for m in idx["moves"]:
+        if m.get("kind") != "emotion":       # 舞蹈库默认排除
+            continue
+        name = m["name"]
+        desc = _DESC_OVERRIDE.get(name) or (m.get("description") or "").replace("\n", " ").strip()
+        rows.append((name, desc))
+    rows.sort(key=lambda r: r[0])
+    names = tuple(r[0] for r in rows)
+    lines = [f"- {n:16} : {d}" for n, d in rows]
+    return names, lines
+
+
+_EMOTION_NAMES, _CATALOG_LINES = build_action_catalog()
+ACTIONS = _EMOTION_NAMES + ("none",)         # v2 合法标签全集(parse_action 校验 + 分布统计)
+_CATALOG_TEXT = "\n".join(_CATALOG_LINES)
 
 PROMPT_SYSTEM = (
-    "You are labeling which body-language action a desktop robot should perform "
-    "while saying a given reply utterance. Reply utterances may be English or Chinese.\n\n"
-    "Choose EXACTLY ONE label from:\n"
-    '- nod            : greeting, agreement, confirmation, accepting a request ("yes", "ok", "sure")\n'
-    '- shake_head     : negation, refusal, disagreement, saying "no"\n'
-    '- wiggle_antennas: happiness, excitement, being praised, enthusiasm, delight\n'
-    '- tilt_head      : curiosity, confusion, thinking, pondering, did not understand\n'
-    '- none           : neutral statement, factual/objective answer, no clear emotion or intent\n\n'
+    "You label which emotional body-language animation a small desktop robot should play "
+    "while it says a given reply utterance. Reply utterances may be English or Chinese.\n\n"
+    "Choose EXACTLY ONE action name from the catalog below, or \"none\".\n"
+    "Each catalog line is `name : when to use it`.\n\n"
+    "=== ACTION CATALOG (85 emotions) ===\n"
+    f"{_CATALOG_TEXT}\n"
+    "=== END CATALOG ===\n\n"
     "Rules:\n"
-    "1. Output STRICTLY a JSON object: {\"action\": \"<label>\"}. No explanation, no prose.\n"
-    "2. When unsure or the utterance is a plain factual answer, ALWAYS choose \"none\".\n"
-    "3. Pick a non-none action ONLY when the emotion/intent is clearly expressed in the text.\n"
-    "4. Functional/delegation sentences (e.g. handing off to a background model) are \"none\"."
+    "1. Output STRICTLY a JSON object: {\"action\": \"<name>\"}. The name MUST be EXACTLY one "
+    "catalog name, or \"none\". No explanation, no prose.\n"
+    "2. DEFAULT TO \"none\". Most replies are plain / neutral / factual and must be \"none\". "
+    "Pick a named emotion ONLY when that specific emotion or intent is CLEARLY expressed in the reply text.\n"
+    "3. When unsure, or when several actions fit only weakly, choose \"none\" (never guess).\n"
+    "4. Functional / delegation sentences (e.g. handing off to a background model) are \"none\".\n"
+    "5. dance1 / dance2 / dance3 ONLY when the reply is explicitly about music or dancing; "
+    "otherwise never pick them."
 )
 
 PROMPT_USER_TMPL = (
@@ -125,7 +168,7 @@ PROMPT_USER_TMPL = (
     "\"\"\"\n"
     "{reply}\n"
     "\"\"\"\n\n"
-    "Respond with only the JSON: {{\"action\": \"<label>\"}}"
+    "Respond with only the JSON: {{\"action\": \"<name>\"}}"
 )
 
 
@@ -286,25 +329,31 @@ def is_delegation(content):
     return "</delegation>" in (content or "")
 
 
+_ACTIONS_SET = set(ACTIONS)
+_ACTIONS_BY_LEN = sorted(ACTIONS, key=len, reverse=True)  # 最长优先,防短名是长名子串(如 sad1 ⊂ no_sad1)
+
+
 def parse_action(text):
     """Robustly parse the LLM output to one of ACTIONS; fallback 'none'."""
     if not text:
         return "none"
     text = text.strip()
-    # 1) JSON object
+    # 1) JSON object(主路径)
     m = re.search(r'\{[^}]*\}', text)
     if m:
         try:
             d = json.loads(m.group())
-            a = str(d.get("action", "")).strip().lower()
-            if a in ACTIONS:
+            a = str(d.get("action", "")).strip()
+            if a in _ACTIONS_SET:
                 return a
+            if a.lower() in _ACTIONS_SET:    # 官方名本就是小写,容错大小写
+                return a.lower()
         except Exception:
             pass
-    # 2) keyword fallback
+    # 2) 关键字兜底:最长名优先,避免短名误命中
     low = text.lower()
-    for a in ACTIONS:
-        if a in low:
+    for a in _ACTIONS_BY_LEN:
+        if a != "none" and a in low:
             return a
     return "none"
 
@@ -596,8 +645,11 @@ def main():
 
     print("\n=== 标签分布 ===", flush=True)
     tot = sum(label_counter.values()) or 1
-    for a in ACTIONS:
-        c = label_counter.get(a, 0)
+    none_c = label_counter.get("none", 0)
+    print(f"  {'none':18} {none_c:>8}  ({none_c/tot*100:5.1f}%)", flush=True)
+    nonzero = [(a, c) for a, c in label_counter.most_common() if a != "none" and c > 0]
+    print(f"  -- 命中的情绪动作 {len(nonzero)}/{len(_EMOTION_NAMES)} 类(按计数降序)--", flush=True)
+    for a, c in nonzero:
         print(f"  {a:18} {c:>8}  ({c/tot*100:5.1f}%)", flush=True)
 
 
