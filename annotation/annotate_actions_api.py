@@ -140,10 +140,22 @@ def build_action_catalog(index_path=MOTION_LIBRARY_INDEX):
 
 
 _EMOTION_NAMES, _CATALOG_LINES = build_action_catalog()
-ACTIONS = _EMOTION_NAMES + ("none",)         # v2 合法标签全集(parse_action 校验 + 分布统计)
 _CATALOG_TEXT = "\n".join(_CATALOG_LINES)
 
-PROMPT_SYSTEM = (
+# 标注模式(M1.5-C3):
+#   demeanor(默认,用户 2026-07-16 定):判断"人说这句话时自然会有的神态",【无 none】,每条必选一个动作;
+#   emotion(旧 v2 可回退):判断"回答本身表达的情绪",保留 none。
+LABEL_MODE = os.environ.get("LABEL_MODE", "demeanor").strip().lower()
+INCLUDE_NONE = (LABEL_MODE == "emotion")
+
+ACTIONS = _EMOTION_NAMES + (("none",) if INCLUDE_NONE else ())
+
+# 解析/兜底失败时的哨兵(demeanor 模式下不允许 none;失败用可见哨兵,不静默塞情绪)
+_FALLBACK = "none" if INCLUDE_NONE else "__unparsed__"
+# delegation(功能性委派 token,非自然话语)的处理:emotion 保持 none;demeanor 用可见哨兵、不调 API
+_DELEGATION_LABEL = "none" if INCLUDE_NONE else "__delegation__"
+
+PROMPT_SYSTEM_EMOTION = (
     "You label which emotional body-language animation a small desktop robot should play "
     "while it says a given reply utterance. Reply utterances may be English or Chinese.\n\n"
     "Choose EXACTLY ONE action name from the catalog below, or \"none\".\n"
@@ -162,9 +174,32 @@ PROMPT_SYSTEM = (
     "otherwise never pick them."
 )
 
+PROMPT_SYSTEM_DEMEANOR = (
+    "A small desktop robot is about to SAY the reply line given below (English or Chinese).\n"
+    "Your job: decide the facial expression / demeanor (神态) that a person would NATURALLY have "
+    "while speaking THIS exact line. Even a plain, factual or descriptive line is spoken with SOME "
+    "demeanor — so you must ALWAYS pick one. Then choose the single best-matching animation.\n\n"
+    "Each catalog line is `name : the mood / situation it fits`.\n\n"
+    "=== ANIMATION CATALOG (85) ===\n"
+    f"{_CATALOG_TEXT}\n"
+    "=== END CATALOG ===\n\n"
+    "Rules:\n"
+    "1. Output STRICTLY a JSON object: {\"action\": \"<name>\"}. The name MUST be EXACTLY one "
+    "catalog name. No explanation, no prose.\n"
+    "2. ALWAYS choose one animation. There is NO \"neutral\" / \"none\" option. Judge how the line "
+    "is naturally delivered (its tone, intent and content) and pick the demeanor that fits best.\n"
+    "3. For a calm, plain or matter-of-fact line, prefer gentle everyday demeanors "
+    "(e.g. attentive1, understanding1, thoughtful1, welcoming1, curious1) rather than intense ones "
+    "(rage1, surprised1, enthusiastic1...). Reserve intense demeanors for lines that truly warrant them.\n"
+    "4. If several fit, choose the most natural / most likely one for a friendly desktop robot.\n"
+    "5. dance1 / dance2 / dance3 ONLY when the line is explicitly about music or dancing."
+)
+
+PROMPT_SYSTEM = PROMPT_SYSTEM_EMOTION if INCLUDE_NONE else PROMPT_SYSTEM_DEMEANOR
+
 PROMPT_USER_TMPL = (
     "Context (what was asked, for disambiguation only):\n{context}\n\n"
-    "Reply utterance to label:\n"
+    "Reply line to label:\n"
     "\"\"\"\n"
     "{reply}\n"
     "\"\"\"\n\n"
@@ -334,9 +369,9 @@ _ACTIONS_BY_LEN = sorted(ACTIONS, key=len, reverse=True)  # 最长优先,防短�
 
 
 def parse_action(text):
-    """Robustly parse the LLM output to one of ACTIONS; fallback 'none'."""
+    """把 LLM 输出解析成 ACTIONS 之一;失败兜底 _FALLBACK(emotion 模式=none,demeanor 模式=可见哨兵)。"""
     if not text:
-        return "none"
+        return _FALLBACK
     text = text.strip()
     # 1) JSON object(主路径)
     m = re.search(r'\{[^}]*\}', text)
@@ -355,7 +390,7 @@ def parse_action(text):
     for a in _ACTIONS_BY_LEN:
         if a != "none" and a in low:
             return a
-    return "none"
+    return _FALLBACK
 
 
 def collect_json_files(path):
@@ -472,9 +507,9 @@ def process_file_streaming(fp, rel, out_path, args, stats):
                     stats.labels[d["action"]] += 1
                     continue
                 if is_delegation(content):
-                    d["action"] = "none"
+                    d["action"] = _DELEGATION_LABEL
                     stats.skipped_delegation += 1
-                    stats.labels["none"] += 1
+                    stats.labels[_DELEGATION_LABEL] += 1
                     continue
                 ctx = get_question_by_index(s, idx)
                 tasks.append((d, content, ctx, 0, idx))
@@ -578,7 +613,8 @@ def main():
     # 设置 API 日志目录
     set_log_dir(str(out_root.parent / "api_logs"))
 
-    print(f"[annotate] 模型={MODEL_NAME}  max_tokens={MAX_TOKENS}  "
+    print(f"[annotate] 模型={MODEL_NAME}  模式={LABEL_MODE}(none={'有' if INCLUDE_NONE else '无'})  "
+          f"max_tokens={MAX_TOKENS}  "
           f"关思考={'是(budget=%d)' % THINKING_BUDGET if THINK_OFF else '否'}  "
           f"reasoning_effort={REASONING_EFFORT or '(未发送)'}  并发={args.max_workers}",
           flush=True)
@@ -645,10 +681,16 @@ def main():
 
     print("\n=== 标签分布 ===", flush=True)
     tot = sum(label_counter.values()) or 1
-    none_c = label_counter.get("none", 0)
-    print(f"  {'none':18} {none_c:>8}  ({none_c/tot*100:5.1f}%)", flush=True)
-    nonzero = [(a, c) for a, c in label_counter.most_common() if a != "none" and c > 0]
-    print(f"  -- 命中的情绪动作 {len(nonzero)}/{len(_EMOTION_NAMES)} 类(按计数降序)--", flush=True)
+    # 先单列非情绪桶(none / 委派 / 解析失败哨兵);demeanor 模式下这些应极少
+    shown = set()
+    for special in ("none", _DELEGATION_LABEL, _FALLBACK):
+        c = label_counter.get(special, 0)
+        if c and special not in shown:
+            print(f"  {special:18} {c:>8}  ({c/tot*100:5.1f}%)", flush=True)
+            shown.add(special)
+    nonzero = [(a, c) for a, c in label_counter.most_common() if a not in shown and c > 0]
+    n_emo = len([a for a, _ in nonzero if a in _EMOTION_NAMES])
+    print(f"  -- 命中的情绪动作 {n_emo}/{len(_EMOTION_NAMES)} 类(按计数降序)--", flush=True)
     for a, c in nonzero:
         print(f"  {a:18} {c:>8}  ({c/tot*100:5.1f}%)", flush=True)
 
