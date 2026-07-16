@@ -102,108 +102,71 @@ REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "").strip()
 # 避免对 ~580MB 大文件整文件 json.loads / 整文件重写 checkpoint。
 CHUNK_SAMPLES = int(os.environ.get("CHUNK_SAMPLES", "500"))
 
-ACTIONS = ("nod", "shake_head", "wiggle_antennas", "tilt_head", "none")  # 旧 5 类(下方 v2 覆盖)
+# ── 神态簇词表 v3(Fable5 裁定 2026-07-16:簇级 demeanor)──
+# 关键裁定:【不做 85 选 1】。understanding1/understanding2/yes1 的差别在【轨迹形态】而非
+# 【语句内容】——同一句"对,他完成了"配这三个都成立,让 LLM 强行 argmax 是在造噪声标签。
+# 文本可判定的是"这句话在肯定/讲解/思考",所以 LLM 只判 13 个【神态簇】;簇内具体动作由
+# 数据生成侧(data_gen/cluster_map.json)按权重随机采样。副产物:catalog 从 ~2400 token 降到
+# ~700,且近义动作靠采样天然全覆盖(与沉默段多峰处理哲学一致)。
+# 裁定原文:docs/decisions/2026-07-16-C3标注裁定-簇级demeanor与候选裁剪.md §2
+#
+# 每簇 = (簇名, 中文名, 触发条件, 反例)。逐行进 prompt。
+CLUSTERS = [
+    ("affirm",   "肯定认同", "The line's core is agreement/confirmation: yes, right, exactly, I agree.",
+     "Neutral retelling of what is on screen -> explain"),
+    ("explain",  "讲解陈述", "Neutral explaining: stating facts, reporting numbers/durations, describing what is seen, no clear emotional swing.",
+     "Has 'look/notice/let's see' guidance -> attend; has 'seems/maybe' speculation -> think"),
+    ("attend",   "引导关注", "Directing attention to something, opening/introducing a topic, encouraging the other to keep talking.",
+     "Purely neutral statement -> explain"),
+    ("think",    "思考推测", "Pondering/inferring/self-questioning: 'maybe, seems like, let me think, why is that'.",
+     "Cannot answer at all -> unsure; neutral scenery description -> explain"),
+    ("unsure",   "困惑不解", "Did not understand / cannot answer / not enough information.",
+     "A speculation with a direction -> think"),
+    ("joy",      "开心兴奋", "Good news, a spectacular moment, praise, a success achieved.",
+     "Neutral 'it is done' -> explain; mild satisfaction -> affirm"),
+    ("surprise", "惊讶",     "Unexpected turn, contrast, 'actually/never thought'.",
+     "Surprised AND happy -> joy; frightened -> fear"),
+    ("fear",     "紧张担忧", "Danger approaching, worried for someone, nervous/uneasy.",
+     "Sadness about a bad outcome that already happened -> sad"),
+    ("negate",   "否定拒绝", "The line's core is negation: no, it isn't, that won't work, I disagree — calm tone.",
+     "Rebuttal with anger -> annoy"),
+    ("annoy",    "不满恼火", "Being offended, criticizing/blaming, strong dissatisfaction.",
+     "Calm disagreement -> negate"),
+    ("sad",      "悲伤低落", "Sad, regretful, parting, empathizing with someone's pain.",
+     "Nervous on someone's behalf -> fear"),
+    ("warm",     "温暖安抚", "Greeting, thanking, comforting, welcoming, expressing fondness.",
+     "Plain happiness -> joy"),
+    ("awkward",  "尴尬歉意", "Own mistake, apologizing, embarrassed.",
+     "Criticizing someone else's mistake -> annoy"),
+]
 
-# ── 动作词表 v2(官方情绪动作库,M1.5-C3 起)──
-# 标签集由旧 5 类升级为官方动作库的 85 个情绪动作 + none。词表【程序化提取】自
-# ../data_gen/motion_library/index.json(kind=="emotion"),不手抄;舞蹈库(19 个 kind=="dance")
-# 默认排除;情绪库里的 dance1/2/3 保留,但仅在音乐/舞蹈语境启用(见 prompt 规则 5)。
-MOTION_LIBRARY_INDEX = (
-    Path(__file__).resolve().parent.parent / "data_gen" / "motion_library" / "index.json"
+CLUSTER_NAMES = tuple(c[0] for c in CLUSTERS)
+ACTIONS = CLUSTER_NAMES          # annotation 产物的 action 值域 = 13 簇名(A5 契约修正,裁定 §4)
+
+# 无 none(demeanor 哲学:人说话必带神态,必选一个)。解析失败/委派用可见哨兵,不静默塞标签。
+_FALLBACK = "__unparsed__"
+_DELEGATION_LABEL = "__delegation__"
+
+_CLUSTER_TABLE = "\n".join(
+    f"- {name:9} | USE WHEN: {trig}\n            NOT: {anti}"
+    for name, _zh, trig, anti in CLUSTERS
 )
 
-# 4 个补录动作官方只留了录制时间戳、无语义描述;按名义补最简英文注释
-# (本机 C3 自决,已在实验记录声明;不改动作本身,只为让 prompt 词条可读)。
-_DESC_OVERRIDE = {
-    "mini-deep-sleep": "Falls into a deep sleep / powered-down rest.",
-    "toc-toc-toc": "A knock-knock gesture, playfully knocking to get attention.",
-    "waiting": "Idly waiting for something to happen, with nothing to do.",
-    "wake-mini-up": "Waking up and booting back to life.",
-}
-
-
-def build_action_catalog(index_path=MOTION_LIBRARY_INDEX):
-    """从官方库 index.json 程序化提取 85 个情绪动作的 (name, description)。
-    返回 (names: tuple, catalog_lines: list[str])。"""
-    idx = json.loads(Path(index_path).read_text(encoding="utf-8"))
-    rows = []
-    for m in idx["moves"]:
-        if m.get("kind") != "emotion":       # 舞蹈库默认排除
-            continue
-        name = m["name"]
-        desc = _DESC_OVERRIDE.get(name) or (m.get("description") or "").replace("\n", " ").strip()
-        rows.append((name, desc))
-    rows.sort(key=lambda r: r[0])
-    names = tuple(r[0] for r in rows)
-    lines = [f"- {n:16} : {d}" for n, d in rows]
-    return names, lines
-
-
-_EMOTION_NAMES, _CATALOG_LINES = build_action_catalog()
-_CATALOG_TEXT = "\n".join(_CATALOG_LINES)
-
-# 标注模式(M1.5-C3):
-#   demeanor(默认,用户 2026-07-16 定):判断"人说这句话时自然会有的神态",【无 none】,每条必选一个动作;
-#   emotion(旧 v2 可回退):判断"回答本身表达的情绪",保留 none。
-LABEL_MODE = os.environ.get("LABEL_MODE", "demeanor").strip().lower()
-INCLUDE_NONE = (LABEL_MODE == "emotion")
-
-ACTIONS = _EMOTION_NAMES + (("none",) if INCLUDE_NONE else ())
-
-# 解析/兜底失败时的哨兵(demeanor 模式下不允许 none;失败用可见哨兵,不静默塞情绪)
-_FALLBACK = "none" if INCLUDE_NONE else "__unparsed__"
-# delegation(功能性委派 token,非自然话语)的处理:emotion 保持 none;demeanor 用可见哨兵、不调 API
-_DELEGATION_LABEL = "none" if INCLUDE_NONE else "__delegation__"
-
-PROMPT_SYSTEM_EMOTION = (
-    "You label which emotional body-language animation a small desktop robot should play "
-    "while it says a given reply utterance. Reply utterances may be English or Chinese.\n\n"
-    "Choose EXACTLY ONE action name from the catalog below, or \"none\".\n"
-    "Each catalog line is `name : when to use it`.\n\n"
-    "=== ACTION CATALOG (85 emotions) ===\n"
-    f"{_CATALOG_TEXT}\n"
-    "=== END CATALOG ===\n\n"
+PROMPT_SYSTEM = (
+    "A small desktop robot is about to SAY each reply line given below (English or Chinese).\n"
+    "For EACH line decide: what demeanor (神态) would a person naturally have while speaking "
+    "THIS exact line? Even a plain, factual or descriptive line is spoken with SOME demeanor — "
+    "so you must ALWAYS pick one. Choose the single best-fitting DEMEANOR CLUSTER.\n\n"
+    "=== DEMEANOR CLUSTERS (choose exactly one name per line) ===\n"
+    f"{_CLUSTER_TABLE}\n"
+    "=== END CLUSTERS ===\n\n"
     "Rules:\n"
-    "1. Output STRICTLY a JSON object: {\"action\": \"<name>\"}. The name MUST be EXACTLY one "
-    "catalog name, or \"none\". No explanation, no prose.\n"
-    "2. DEFAULT TO \"none\". Most replies are plain / neutral / factual and must be \"none\". "
-    "Pick a named emotion ONLY when that specific emotion or intent is CLEARLY expressed in the reply text.\n"
-    "3. When unsure, or when several actions fit only weakly, choose \"none\" (never guess).\n"
-    "4. Functional / delegation sentences (e.g. handing off to a background model) are \"none\".\n"
-    "5. dance1 / dance2 / dance3 ONLY when the reply is explicitly about music or dancing; "
-    "otherwise never pick them."
-)
-
-PROMPT_SYSTEM_DEMEANOR = (
-    "A small desktop robot is about to SAY the reply line given below (English or Chinese).\n"
-    "Your job: decide the facial expression / demeanor (神态) that a person would NATURALLY have "
-    "while speaking THIS exact line. Even a plain, factual or descriptive line is spoken with SOME "
-    "demeanor — so you must ALWAYS pick one. Then choose the single best-matching animation.\n\n"
-    "Each catalog line is `name : the mood / situation it fits`.\n\n"
-    "=== ANIMATION CATALOG (85) ===\n"
-    f"{_CATALOG_TEXT}\n"
-    "=== END CATALOG ===\n\n"
-    "Rules:\n"
-    "1. Output STRICTLY a JSON object: {\"action\": \"<name>\"}. The name MUST be EXACTLY one "
-    "catalog name. No explanation, no prose.\n"
-    "2. ALWAYS choose one animation. There is NO \"neutral\" / \"none\" option. Judge how the line "
-    "is naturally delivered (its tone, intent and content) and pick the demeanor that fits best.\n"
-    "3. For a calm, plain or matter-of-fact line, prefer gentle everyday demeanors "
-    "(e.g. attentive1, understanding1, thoughtful1, welcoming1, curious1) rather than intense ones "
-    "(rage1, surprised1, enthusiastic1...). Reserve intense demeanors for lines that truly warrant them.\n"
-    "4. If several fit, choose the most natural / most likely one for a friendly desktop robot.\n"
-    "5. dance1 / dance2 / dance3 ONLY when the line is explicitly about music or dancing."
-)
-
-PROMPT_SYSTEM = PROMPT_SYSTEM_EMOTION if INCLUDE_NONE else PROMPT_SYSTEM_DEMEANOR
-
-PROMPT_USER_TMPL = (
-    "Context (what was asked, for disambiguation only):\n{context}\n\n"
-    "Reply line to label:\n"
-    "\"\"\"\n"
-    "{reply}\n"
-    "\"\"\"\n\n"
-    "Respond with only the JSON: {{\"action\": \"<name>\"}}"
+    "1. Use ONLY the cluster names exactly as spelled above. There is NO 'neutral'/'none' option.\n"
+    "2. Judge how the line is naturally delivered (its function, tone and intent) — not merely how "
+    "exciting the described content is. A calm narrator describing a fight is still `explain`, not `joy`.\n"
+    "3. Most descriptive / narration / factual lines are `explain`. Reserve intense clusters "
+    "(joy/surprise/fear/annoy/sad) for lines that truly warrant them.\n"
+    "4. If two clusters fit, use the NOT-hints above to disambiguate."
 )
 
 
@@ -223,13 +186,31 @@ def get_client():
         return _client
 
 
-def build_messages(reply, context):
-    return [
-        {"role": "system", "content": PROMPT_SYSTEM},
-        {"role": "user", "content": PROMPT_USER_TMPL.format(
-            context=context or "(none)", reply=reply
-        )},
-    ]
+def _item_text(n, reply, context):
+    return (f"--- ITEM {n} ---\n"
+            f"Context (what was asked, for disambiguation only): {context or '(none)'}\n"
+            f"Line: \"\"\"{reply}\"\"\"")
+
+
+def build_batch_messages(items):
+    """items: [(task, reply, context)] → 编号列表进、JSON 数组出(裁定 §5.2 批处理)。"""
+    body = "\n\n".join(_item_text(n, r, c) for n, (_t, r, c) in enumerate(items, 1))
+    user = (
+        f"Label EACH of the {len(items)} items below.\n\n{body}\n\n"
+        f"Respond with ONLY a JSON array of exactly {len(items)} objects, in the same order:\n"
+        '[{"i": 1, "action": "<cluster>"}, ...]\n'
+        "No prose, no markdown fence."
+    )
+    return [{"role": "system", "content": PROMPT_SYSTEM},
+            {"role": "user", "content": user}]
+
+
+def build_single_messages(reply, context):
+    """单条重试用(批内某条解析失败时回退到单条调用)。"""
+    user = (f"{_item_text(1, reply, context)}\n\n"
+            'Respond with ONLY the JSON: {"i": 1, "action": "<cluster>"}')
+    return [{"role": "system", "content": PROMPT_SYSTEM},
+            {"role": "user", "content": user}]
 
 
 def _extract_output_and_finish(response):
@@ -365,13 +346,74 @@ def is_delegation(content):
 
 
 _ACTIONS_SET = set(ACTIONS)
-_ACTIONS_BY_LEN = sorted(ACTIONS, key=len, reverse=True)  # 最长优先,防短名是长名子串(如 sad1 ⊂ no_sad1)
+_ACTIONS_BY_LEN = sorted(ACTIONS, key=len, reverse=True)   # 最长优先,防短簇名是长簇名子串
+
+
+def _norm_cluster(a):
+    """把一个候选字符串规整成合法簇名;不合法返回 None。"""
+    if a is None:
+        return None
+    a = str(a).strip().strip('"'').lower()
+    return a if a in _ACTIONS_SET else None
 
 
 def parse_action(text):
-    """把 LLM 输出解析成 ACTIONS 之一;失败兜底 _FALLBACK(emotion 模式=none,demeanor 模式=可见哨兵)。"""
+    """单条输出 → 簇名;失败返回 _FALLBACK(可见哨兵,不静默塞标签)。"""
     if not text:
         return _FALLBACK
+    text = text.strip()
+    # 1) JSON(主路径):{"i":1,"action":"explain"} 或裸 {"action":...}
+    m = re.search(r'\{[^}]*\}', text)
+    if m:
+        try:
+            got = _norm_cluster(json.loads(m.group()).get("action"))
+            if got:
+                return got
+        except Exception:
+            pass
+    # 2) 裸簇名(prompt 规则1 要求只输出簇名)
+    got = _norm_cluster(text)
+    if got:
+        return got
+    # 3) 关键字兜底:最长优先
+    low = text.lower()
+    for a in _ACTIONS_BY_LEN:
+        if a in low:
+            return a
+    return _FALLBACK
+
+
+def parse_batch(text, n):
+    """批输出 → 长度 n 的簇名列表;某位解析不出则该位为 None(交由单条重试)。"""
+    out = [None] * n
+    if not text:
+        return out
+    m = re.search(r'\[.*\]', text, re.S)          # 抓 JSON 数组
+    if not m:
+        return out
+    try:
+        arr = json.loads(m.group())
+    except Exception:
+        return out
+    if not isinstance(arr, list):
+        return out
+    for pos, item in enumerate(arr):
+        if not isinstance(item, dict):
+            continue
+        # 优先按 i 字段归位(模型可能乱序);i 缺失/越界则按数组位置
+        idx = item.get("i")
+        try:
+            idx = int(idx) - 1
+        except Exception:
+            idx = pos
+        if not (0 <= idx < n):
+            idx = pos if pos < n else None
+        if idx is None:
+            continue
+        got = _norm_cluster(item.get("action"))
+        if got:
+            out[idx] = got
+    return out
     text = text.strip()
     # 1) JSON object(主路径)
     m = re.search(r'\{[^}]*\}', text)
