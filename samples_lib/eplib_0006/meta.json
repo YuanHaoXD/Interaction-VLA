@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0006",
+ "source": "synthetic_v1_lib",
+ "duration_s": 19.297,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:come1",
+   "t": 5.8
+  },
+  {
+   "label": "wiggle_antennas",
+   "t": 12.4
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

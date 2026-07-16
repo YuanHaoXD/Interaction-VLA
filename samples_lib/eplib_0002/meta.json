@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0002",
+ "source": "synthetic_v1_lib",
+ "duration_s": 16.074,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:calming1",
+   "t": 4.3
+  },
+  {
+   "label": "nod",
+   "t": 10.4
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

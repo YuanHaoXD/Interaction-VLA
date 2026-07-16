@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0012",
+ "source": "synthetic_v1_lib",
+ "duration_s": 19.922,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:curious1",
+   "t": 4.7
+  },
+  {
+   "label": "tilt_head",
+   "t": 12.2
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

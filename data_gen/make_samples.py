@@ -5,11 +5,21 @@ from data_gen.templates import compose, FPS
 from data_gen.schema import write_episode, validate_episode
 
 ROOT = pathlib.Path(__file__).parent.parent
-LIMITS = json.loads((ROOT/"sim"/"limits.json").read_text(encoding="utf-8"))
+# C2 起限幅统一改用 limits_real(真机可行域;sim/limits.json 是仿真虚高值,勿用于生成)
+LIMITS = json.loads((ROOT/"sim"/"limits_real.json").read_text(encoding="utf-8"))
 LABELS = ["nod","shake_head","tilt_head","wiggle_antennas","none"]
 UTTER = ["好的,没问题!","这个我不太同意。","让我想想…","哈哈,有意思!","你说的是那个红色的吗?"]
 
 def est_dur(text): return round(len(text) / 5.5, 2)   # 中文时长代理:5.5字/秒
+
+def _merge_prev_meta(ep, meta):
+    """保留已存在 meta 里由外部流程(如 A3 隐状态预计算)写入的额外键(d_model/n_decisions 等)。"""
+    old = ep/"meta.json"
+    if old.exists():
+        prev = json.loads(old.read_text(encoding="utf-8"))
+        for k, v in prev.items():
+            meta.setdefault(k, v)
+    return meta
 
 def main(n=100):
     rng = np.random.default_rng(2026)
@@ -32,10 +42,11 @@ def main(n=100):
         # 舍入放在 timeline 构建之后:t_resp/q_t 仍用原始 dur → timeline 与旧版逐字一致。
         dur_r = round(dur, 3)
         traj = compose(dur_r, events, spans, rng, LIMITS)
+        ep = ROOT/"samples"/f"ep_{i:08d}"
         meta = {"episode_id": f"ep_{i:08d}", "source": "synthetic_v1",
                 "duration_s": dur_r, "fps_action": FPS, "seed": 2026,
                 "template_events": events, "origin_video": "sample", "schema_version": 1}
-        ep = ROOT/"samples"/meta["episode_id"]
+        meta = _merge_prev_meta(ep, meta)
         write_episode(ep, meta, sorted(timeline, key=lambda e: e["t"]), traj)
         errs = validate_episode(ep)
         assert not errs, f"{ep}: {errs}"

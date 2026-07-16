@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0007",
+ "source": "synthetic_v1_lib",
+ "duration_s": 16.925,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:boredom1",
+   "t": 3.2
+  },
+  {
+   "label": "nod",
+   "t": 9.8
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

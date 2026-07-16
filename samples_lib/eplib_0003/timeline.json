@@ -1,0 +1,26 @@
+[
+ {
+  "t": 1.9,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 4.0,
+  "type": "response",
+  "text": "我在听,你继续。",
+  "est_speech_dur_s": 1.45,
+  "action_label": "cheerful1"
+ },
+ {
+  "t": 8.8,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 10.6,
+  "type": "response",
+  "text": "哈哈,有意思!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "wiggle_antennas"
+ }
+]

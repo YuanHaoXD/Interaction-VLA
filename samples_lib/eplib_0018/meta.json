@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0018",
+ "source": "synthetic_v1_lib",
+ "duration_s": 18.08,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:cheerful1",
+   "t": 4.7
+  },
+  {
+   "label": "nod",
+   "t": 11.5
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

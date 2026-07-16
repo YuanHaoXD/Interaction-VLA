@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0019",
+ "source": "synthetic_v1_lib",
+ "duration_s": 20.43,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:attentive1",
+   "t": 4.8
+  },
+  {
+   "label": "nod",
+   "t": 12.5
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}

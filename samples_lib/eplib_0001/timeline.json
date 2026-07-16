@@ -1,0 +1,26 @@
+[
+ {
+  "t": 2.3,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 4.1,
+  "type": "response",
+  "text": "这个我不太同意。",
+  "est_speech_dur_s": 1.45,
+  "action_label": "amazed1"
+ },
+ {
+  "t": 7.7,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 10.0,
+  "type": "response",
+  "text": "让我想想…",
+  "est_speech_dur_s": 0.91,
+  "action_label": "tilt_head"
+ }
+]

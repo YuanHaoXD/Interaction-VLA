@@ -1,0 +1,26 @@
+[
+ {
+  "t": 2.1,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 5.1,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "calming1"
+ },
+ {
+  "t": 8.5,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 10.9,
+  "type": "response",
+  "text": "这个我不太同意。",
+  "est_speech_dur_s": 1.45,
+  "action_label": "wiggle_antennas"
+ }
+]

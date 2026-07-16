@@ -1,0 +1,26 @@
+[
+ {
+  "t": 2.2,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 4.4,
+  "type": "response",
+  "text": "好的,没问题!",
+  "est_speech_dur_s": 1.27,
+  "action_label": "amazed1"
+ },
+ {
+  "t": 8.8,
+  "type": "user_text",
+  "text": "(用户提问)"
+ },
+ {
+  "t": 11.2,
+  "type": "response",
+  "text": "你说的是那个红色的吗?",
+  "est_speech_dur_s": 2.0,
+  "action_label": "tilt_head"
+ }
+]

@@ -176,7 +176,8 @@ def main():
     args = ap.parse_args()
 
     root = Path(__file__).parent.parent
-    limits = json.loads((root / "sim" / "limits.json").read_text(encoding="utf-8"))
+    # C2 起限幅统一改用 limits_real(真机可行域);sim/limits.json 是仿真虚高值,勿用于生成
+    limits = json.loads((root / "sim" / "limits_real.json").read_text(encoding="utf-8"))
     stats = run_pipeline(args.annotation, args.out, limits, args.n_max, args.workers)
     print(f"完成:{stats['ok']}/{stats['total']} 通过,{stats['fail']} 失败")
     for eid, reason in stats["fail_detail"]:

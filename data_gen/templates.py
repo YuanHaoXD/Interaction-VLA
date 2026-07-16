@@ -80,7 +80,12 @@ def compose(duration_s, events, speech_spans, rng, limits):
     T = _T(duration_s)
     traj = idle_motion(duration_s, rng) + backchannel_nods(duration_s, speech_spans or [], rng)
     for ev in events:
-        seg, _ = render_template(ev["label"], min(4.0, duration_s - ev["t"]), rng, ev.get("params"))
+        label = ev["label"]
+        if label.startswith("lib:"):                                          # 官方库动作(C2)
+            from data_gen.augment import load_lib_move, augment_lib_move       # 懒加载避免循环导入
+            seg = augment_lib_move(load_lib_move(label[4:]), rng, **(ev.get("aug") or {}))
+        else:                                                                 # 手写模板
+            seg, _ = render_template(label, min(4.0, duration_s - ev["t"]), rng, ev.get("params"))
         jitter = rng.uniform(-0.2, 0.5)                                        # 时间锚定抖动
         i = max(0, int((ev["t"] + jitter) * FPS))
         n = min(len(seg), T - i)

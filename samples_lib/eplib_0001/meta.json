@@ -1,0 +1,19 @@
+{
+ "episode_id": "eplib_0001",
+ "source": "synthetic_v1_lib",
+ "duration_s": 16.287,
+ "fps_action": 50,
+ "seed": 20260715,
+ "template_events": [
+  {
+   "label": "lib:amazed1",
+   "t": 4.1
+  },
+  {
+   "label": "tilt_head",
+   "t": 10.0
+  }
+ ],
+ "origin_video": "sample_lib",
+ "schema_version": 1
+}
