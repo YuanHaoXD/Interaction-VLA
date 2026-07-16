@@ -102,6 +102,11 @@ REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "").strip()
 # 避免对 ~580MB 大文件整文件 json.loads / 整文件重写 checkpoint。
 CHUNK_SAMPLES = int(os.environ.get("CHUNK_SAMPLES", "500"))
 
+# 批处理(Fable5 裁定 §5.2 / §6 成本账):每次调用打包 N 条 response,把簇准则表(~700 token)
+# 摊薄到每条 ~120 token 输入。N=20 是裁定给的初值。失败按单条重试,上限 MAX_ITEM_RETRY。
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "20"))
+MAX_ITEM_RETRY = int(os.environ.get("MAX_ITEM_RETRY", "3"))
+
 # ── 神态簇词表 v3(Fable5 裁定 2026-07-16:簇级 demeanor)──
 # 关键裁定:【不做 85 选 1】。understanding1/understanding2/yes1 的差别在【轨迹形态】而非
 # 【语句内容】——同一句"对,他完成了"配这三个都成立,让 LLM 强行 argmax 是在造噪声标签。
@@ -164,8 +169,10 @@ PROMPT_SYSTEM = (
     "1. Use ONLY the cluster names exactly as spelled above. There is NO 'neutral'/'none' option.\n"
     "2. Judge how the line is naturally delivered (its function, tone and intent) — not merely how "
     "exciting the described content is. A calm narrator describing a fight is still `explain`, not `joy`.\n"
-    "3. Most descriptive / narration / factual lines are `explain`. Reserve intense clusters "
-    "(joy/surprise/fear/annoy/sad) for lines that truly warrant them.\n"
+    "3. `explain` is only for lines that are PURELY neutral report. Before settling on `explain`, "
+    "actively check the other clusters — a describing line that points something out is `attend`, "
+    "one that speculates is `think`, one that confirms is `affirm`, one that marvels is `surprise`/`joy`. "
+    "Use `explain` only when none of the others genuinely fit.\n"
     "4. If two clusters fit, use the NOT-hints above to disambiguate."
 )
 
@@ -353,7 +360,7 @@ def _norm_cluster(a):
     """把一个候选字符串规整成合法簇名;不合法返回 None。"""
     if a is None:
         return None
-    a = str(a).strip().strip('"'').lower()
+    a = str(a).strip().strip('"\'').lower()
     return a if a in _ACTIONS_SET else None
 
 
@@ -554,14 +561,16 @@ def process_file_streaming(fp, rel, out_path, args, stats):
                     stats.labels[_DELEGATION_LABEL] += 1
                     continue
                 ctx = get_question_by_index(s, idx)
-                tasks.append((d, content, ctx, 0, idx))
-        futures = {pool.submit(label_one_task, t): t for t in tasks}
+                tasks.append((d, content, ctx))
+        # 批处理(裁定 §5.2):每 BATCH_SIZE 条打一次包,摊薄 system prompt 的簇准则表
+        batches = [tasks[i:i + BATCH_SIZE] for i in range(0, len(tasks), BATCH_SIZE)]
+        futures = [pool.submit(label_batch, b) for b in batches]
         for fut in as_completed(futures):
-            task, action, status = fut.result()
-            task[0]["action"] = action
-            stats.labels[action] += 1
-            stats.status[status] += 1
-            stats.llm_calls += 1
+            for d, action, status in fut.result():
+                d["action"] = action
+                stats.labels[action] += 1
+                stats.status[status] += 1
+            stats.llm_calls += 1                    # 计"批调用数"(单条重试另计)
         # 整块标完再一次性追加到工作文件（每行一个 compact sample）
         for s in buffer:
             fout.write(json.dumps(s, ensure_ascii=False).encode("utf-8") + b"\n")
@@ -596,35 +605,54 @@ def process_file_streaming(fp, rel, out_path, args, stats):
           flush=True)
 
 
-def label_one_task(task):
-    """标注一个 task，返回 (task, action, status)。
+def _call_with_budget_retry(messages, budget_mult=4):
+    """调一次 API;空/截断则加大预算重试一次。返回 (output, status_hint)。
 
-    status: ok       正常拿到非空、未截断的输出
-            recovered 首次空/截断，加大预算重试后成功
-            empty    重试后仍空/截断（思考 token 吃光预算，已兜底为 none）
-            error    API 不可重试错误（已兜底为 none）
+    status_hint: ok / recovered / empty / error
     """
-    target_dict, content, ctx, sample_idx, resp_idx = task
-    messages = build_messages(content, ctx)
-
     output, _resp, finish = call_api(messages)
-
     if output and output.startswith("ERROR:"):
-        return task, "none", "error"
-
-    status = "ok"
+        return None, "error"
     truncated = (not output or not output.strip()) or (finish == "length")
-    if truncated:
-        # 疑似思考 token 吃光了 max_tokens：加大预算重试一次（仅调大 max_tokens，
-        # 不加平台专有参数，保证对未知代理安全）。
-        output2, _resp2, finish2 = call_api(messages, max_tokens=MAX_TOKENS * 4)
-        if output2 and not output2.startswith("ERROR:"):
-            output, finish = output2, finish2
-        still_bad = (not output or not output.strip()) or (finish == "length")
-        status = "empty" if still_bad else "recovered"
+    if not truncated:
+        return output, "ok"
+    # 疑似思考 token 吃光了 max_tokens:加大预算重试一次(仅调大 max_tokens,对未知代理安全)
+    output2, _r2, finish2 = call_api(messages, max_tokens=MAX_TOKENS * budget_mult)
+    if output2 and not output2.startswith("ERROR:"):
+        still_bad = (not output2.strip()) or (finish2 == "length")
+        return (None, "empty") if still_bad else (output2, "recovered")
+    return None, "empty"
 
-    action = parse_action(output)
-    return task, action, status
+
+def label_batch(batch):
+    """标注一批(裁定 §5.2)。batch: [(d, reply, ctx)] → [(d, action, status)]。
+
+    流程:整批一次调用 → 逐条校验 → 失败的单条重试(上限 MAX_ITEM_RETRY) → 仍失败记哨兵。
+    status: ok / recovered / retried_ok(批内失败但单条救回) / empty / error
+    """
+    n = len(batch)
+    output, hint = _call_with_budget_retry(build_batch_messages(batch))
+    labels = parse_batch(output, n) if output else [None] * n
+
+    results = []
+    for pos, (d, reply, ctx) in enumerate(batch):
+        action, status = labels[pos], (hint if labels[pos] is None else hint)
+        if action is not None:
+            results.append((d, action, "ok" if hint == "ok" else hint))
+            continue
+        # 批内该条没解析出来 → 单条重试(有上限,失败不无限重试)
+        got, st = None, hint
+        for _ in range(MAX_ITEM_RETRY):
+            out1, st1 = _call_with_budget_retry(build_single_messages(reply, ctx))
+            if out1:
+                cand = parse_action(out1)
+                if cand != _FALLBACK:
+                    got, st = cand, "retried_ok"
+                    break
+            st = st1
+        results.append((d, got if got else _FALLBACK,
+                        st if got else ("empty" if st in ("ok", "empty") else st)))
+    return results
 
 
 def main():
@@ -655,8 +683,8 @@ def main():
     # 设置 API 日志目录
     set_log_dir(str(out_root.parent / "api_logs"))
 
-    print(f"[annotate] 模型={MODEL_NAME}  模式={LABEL_MODE}(none={'有' if INCLUDE_NONE else '无'})  "
-          f"max_tokens={MAX_TOKENS}  "
+    print(f"[annotate] 模型={MODEL_NAME}  簇级demeanor({len(CLUSTER_NAMES)}簇,无none)  "
+          f"批大小={BATCH_SIZE}  max_tokens={MAX_TOKENS}  "
           f"关思考={'是(budget=%d)' % THINKING_BUDGET if THINK_OFF else '否'}  "
           f"reasoning_effort={REASONING_EFFORT or '(未发送)'}  并发={args.max_workers}",
           flush=True)
@@ -714,7 +742,7 @@ def main():
     n_recovered = status_counter.get("recovered", 0)
     if total_llm_calls and (n_empty + n_error) / total_llm_calls > 0.02:
         print(f"\n  ⚠️  空/截断({n_empty}) + 错误({n_error}) 占比偏高！"
-              f"这些已被兜底成 none，可能是**静默误标**。", flush=True)
+              f"这些已记为 {_FALLBACK} 哨兵（不静默塞标签，可在产物里筛出重标）。", flush=True)
         print(f"     若多为 empty：思考 token 很可能吃光了 max_tokens。对策：调大 "
               f"MAX_TOKENS，或（若平台支持）设 REASONING_EFFORT=none 关思考。", flush=True)
     elif n_recovered:
@@ -731,10 +759,17 @@ def main():
             print(f"  {special:18} {c:>8}  ({c/tot*100:5.1f}%)", flush=True)
             shown.add(special)
     nonzero = [(a, c) for a, c in label_counter.most_common() if a not in shown and c > 0]
-    n_emo = len([a for a, _ in nonzero if a in _EMOTION_NAMES])
-    print(f"  -- 命中的情绪动作 {n_emo}/{len(_EMOTION_NAMES)} 类(按计数降序)--", flush=True)
+    n_hit = len([a for a, _ in nonzero if a in CLUSTER_NAMES])
+    print(f"  -- 命中的神态簇 {n_hit}/{len(CLUSTER_NAMES)}(按计数降序)--", flush=True)
     for a, c in nonzero:
-        print(f"  {a:18} {c:>8}  ({c/tot*100:5.1f}%)", flush=True)
+        flag = "  ⚠️>40% 塌陷" if (a in CLUSTER_NAMES and c / tot > 0.40) else ""
+        print(f"  {a:18} {c:>8}  ({c/tot*100:5.1f}%){flag}", flush=True)
+    # 裁定 §5.3 的塌陷阈值:单簇 >40% 即回报再裁
+    worst = max(((a, c) for a, c in nonzero if a in CLUSTER_NAMES), default=None,
+                key=lambda x: x[1])
+    if worst and worst[1] / tot > 0.40:
+        print(f"\n  ⚠️  单簇 {worst[0]} 占 {worst[1]/tot*100:.1f}% > 40%(裁定 §5.3 塌陷阈值)"
+              f"——需回报 Fable5 再裁准则/再裁簇。", flush=True)
 
 
 if __name__ == "__main__":
