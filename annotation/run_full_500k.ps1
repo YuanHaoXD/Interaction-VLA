@@ -3,7 +3,7 @@
 # 【断点续标】随时 Ctrl+C 停；重跑本脚本即从断点继续，已标的不会重标、不会重复花钱。
 # 【预算硬闸】每段用 --response_limit 卡死计费 response 数；续跑时已完成部分会计入配额，
 #             所以重跑【不会】突破预算（这点已由 _test_resume_quota.py 离线自测覆盖）。
-# 【日志保留】每次运行追加到 logs\full_500k_<时间戳>.log；API 逐次调用日志在 annotated_full\..\api_logs\。
+# 【日志保留】每次运行追加到 logs\full_500k_<时间戳>.log；API 逐次调用日志在 annotated_full\api_logs\。
 #
 # 用法:
 #   cd E:\Github\ReachyMni_Project\interaction-vla\annotation
@@ -18,6 +18,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 $env:PYTHONUTF8 = "1"
+
+# 控制台切 UTF-8：Python 按 UTF-8 输出(PYTHONUTF8=1)，但 PowerShell 控制台默认按 GBK(cp936)
+# 解码显示 → 中文全乱码。下面两行把控制台输出编码也切成 UTF-8，屏幕与 Tee 落盘的 .log 都不再乱。
+chcp 65001 > $null
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $PY   = ".\.venv\Scripts\python.exe"
 $ROOT = "E:\Github\ReachyMni_Project\action-annotation\JoyAI-VL-Interaction"

@@ -821,12 +821,23 @@ def main():
                   f"len(response)={rn}", flush=True)
 
     # LLM 调用健康度（识别"思考 token 吃光预算→静默误标 none"）
-    print("\n=== LLM 调用健康度 ===", flush=True)
-    for st in ("ok", "recovered", "empty", "error"):
-        print(f"  {st:10} {status_counter.get(st, 0):>8}", flush=True)
+    # 注意:必须把【全部】状态列全,否则会出现"ok 数 < 计费 response 数"的假缺口。
+    # retried_ok = 批内该条没解析出来、单条重试救回(narration 这类长文本批更容易触发)。
+    print("\n=== LLM 调用健康度（按 response 计）===", flush=True)
+    _ALL_ST = ("ok", "retried_ok", "recovered", "empty", "error")
+    for st in _ALL_ST:
+        print(f"  {st:11} {status_counter.get(st, 0):>8}", flush=True)
+    n_status = sum(status_counter.get(s, 0) for s in _ALL_ST)
+    print(f"  {'小计':11} {n_status:>8}   "
+          f"(应 = 计费 response {stats.responses} − 自带action/委派 {stats.responses - n_status})",
+          flush=True)
     n_empty = status_counter.get("empty", 0)
     n_error = status_counter.get("error", 0)
     n_recovered = status_counter.get("recovered", 0)
+    n_retried = status_counter.get("retried_ok", 0)
+    if n_retried:
+        print(f"\n  提示：{n_retried} 条批内漏解析、单条重试救回（已正确标注，非丢失）。"
+              f"占比 {n_retried/max(n_status,1)*100:.3f}%；若飙高可调小 BATCH_SIZE。", flush=True)
     if total_llm_calls and (n_empty + n_error) / total_llm_calls > 0.02:
         print(f"\n  ⚠️  空/截断({n_empty}) + 错误({n_error}) 占比偏高！"
               f"这些已记为 {_FALLBACK} 哨兵（不静默塞标签，可在产物里筛出重标）。", flush=True)
