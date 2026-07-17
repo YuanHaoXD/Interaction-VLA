@@ -1,5 +1,7 @@
 {
-  "_comment": "A5 流水线的 JoyAI 标注数据样例(fixture)。真实标注数据(action-annotation 300万样本)不在本机,格式以此为契约:每个样本 = 一段视频的每秒对话时间线 + Gemini 打的 5 类离散动作标签。真数据落 datasets/ 后 pipeline 直接消费。",
+  "_comment": "A5/C4 流水线的 JoyAI 标注数据样例(fixture)。M1.5-C4 v2: 簇级 demeanor 格式，action 字段值域为 13 个簇名。兼容旧格式（直接动作名/模板类）。",
+  "_version": "2.0",
+  "_cluster_names": ["affirm", "explain", "attend", "think", "unsure", "joy", "surprise", "fear", "negate", "annoy", "sad", "warm", "awkward"],
   "samples": [
     {
       "video_id": "XKyuguz1jHc",
@@ -10,24 +12,42 @@
       ],
       "response": [
         [
-          {"content": "只是今天想感受点魔法!", "time": 7.0, "action": "wiggle_antennas"}
+          {"content": "只是今天想感受点魔法!", "time": 7.0, "action": "joy"}
         ],
         [
-          {"content": "我也不太确定呢。", "time": 15.5, "action": "tilt_head"},
-          {"content": "不过挺好听的。", "time": 17.2, "action": "nod"}
+          {"content": "我也不太确定呢。", "time": 15.5, "action": "unsure"},
+          {"content": "不过挺好听的。", "time": 17.2, "action": "affirm"}
         ]
       ]
     },
     {
-      "video_id": "Ab3dEf9GhiJ",
-      "video_duration_s": 12.0,
+      "video_id": "LibMoveSample1",
+      "video_duration_s": 18.0,
       "question": [
-        {"content": "Is that a real dog?", "time": 2.0}
+        {"content": "你看我新造了个会飞的机器人!", "time": 2.0},
+        {"content": "怎么不说话啦?", "time": 11.0}
       ],
       "response": [
         [
-          {"content": "No, it's a robot!", "time": 4.5, "action": "shake_head"}
+          {"content": "太不可思议了!", "time": 4.5, "action": "surprise"}
+        ],
+        [
+          {"content": "我在想怎么回答你。", "time": 13.0, "action": "think"}
         ]
+      ]
+    },
+    {
+      "video_id": "ExplainSample",
+      "video_duration_s": 35.0,
+      "question": [
+        {"content": "这视频在讲什么?", "time": 1.0}
+      ],
+      "response": [
+        {"content": "画面一开始是新闻主播在演播室。", "time": 3.0, "action": "explain"},
+        {"content": "注意第三秒出现了ASML标识。", "time": 8.0, "action": "attend"},
+        {"content": "镜头转到工厂车间。", "time": 15.0, "action": "explain"},
+        {"content": "现在给到了ASML大楼外景。", "time": 22.0, "action": "explain"},
+        {"content": "这是光刻设备内部。", "time": 28.0, "action": "explain"}
       ]
     },
     {

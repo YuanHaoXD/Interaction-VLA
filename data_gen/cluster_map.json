@@ -1,0 +1,192 @@
+{
+  "_comment": "M1.5-C4 簇→官方动作映射表。依据 docs/decisions/2026-07-16-C3 标注裁定 - 簇级 demeanor 与候选裁剪.md §3 与 data_gen/motion_library/index.md 构建。强烈动作权重 ≤0.05。",
+  "_version": "1.0",
+  "_updated": "2026-07-17",
+  "render_prob": {
+    "_comment": "各簇渲染概率（M2 可调）。未渲染的 response 只保留 idle+backchannel，簇标签仍留在 timeline 里。",
+    "explain": 0.35,
+    "attend": 0.6,
+    "affirm": 0.6,
+    "think": 0.6,
+    "unsure": 0.85,
+    "joy": 0.85,
+    "surprise": 0.85,
+    "fear": 0.85,
+    "negate": 0.85,
+    "annoy": 0.85,
+    "sad": 0.85,
+    "warm": 0.85,
+    "awkward": 0.85
+  },
+  "clusters": {
+    "affirm": {
+      "_comment": "肯定认同：核心是'对/是的/没错/同意'，明确表态认可",
+      "moves": [
+        {"move": "yes1", "weight": 0.20},
+        {"move": "understanding1", "weight": 0.18},
+        {"move": "understanding2", "weight": 0.18},
+        {"move": "proud1", "weight": 0.12},
+        {"move": "proud2", "weight": 0.12},
+        {"move": "proud3", "weight": 0.10},
+        {"move": "success1", "weight": 0.05},
+        {"move": "success2", "weight": 0.05}
+      ]
+    },
+    "explain": {
+      "_comment": "讲解陈述：中性说明、报数据、复述所见，无明显情绪起伏。主要为语言类，配少量温和手势。",
+      "moves": [
+        {"move": "curious1", "weight": 0.25},
+        {"move": "inquiring1", "weight": 0.20},
+        {"move": "inquiring2", "weight": 0.20},
+        {"move": "inquiring3", "weight": 0.20},
+        {"move": "helpful1", "weight": 0.08},
+        {"move": "helpful2", "weight": 0.07}
+      ]
+    },
+    "attend": {
+      "_comment": "引导关注：提醒注意某处、开场引入、鼓励对方继续说",
+      "moves": [
+        {"move": "attentive1", "weight": 0.22},
+        {"move": "attentive2", "weight": 0.22},
+        {"move": "welcoming1", "weight": 0.18},
+        {"move": "welcoming2", "weight": 0.18},
+        {"move": "come1", "weight": 0.10},
+        {"move": "enthusiastic2", "weight": 0.10}
+      ]
+    },
+    "think": {
+      "_comment": "思考推测：沉吟/推断/自问",
+      "moves": [
+        {"move": "thoughtful1", "weight": 0.30},
+        {"move": "thoughtful2", "weight": 0.30},
+        {"move": "uncertain1", "weight": 0.20},
+        {"move": "lost1", "weight": 0.20}
+      ]
+    },
+    "unsure": {
+      "_comment": "困惑不解：没看懂/答不上/信息不足",
+      "moves": [
+        {"move": "confused1", "weight": 0.50},
+        {"move": "incomprehensible2", "weight": 0.40},
+        {"move": "lost1", "weight": 0.10}
+      ]
+    },
+    "joy": {
+      "_comment": "开心兴奋：好消息、精彩瞬间、夸赞、成功达成",
+      "moves": [
+        {"move": "cheerful1", "weight": 0.18},
+        {"move": "enthusiastic1", "weight": 0.18},
+        {"move": "enthusiastic2", "weight": 0.15},
+        {"move": "laughing1", "weight": 0.15},
+        {"move": "laughing2", "weight": 0.12},
+        {"move": "amazed1", "weight": 0.12},
+        {"move": "loving1", "weight": 0.10}
+      ]
+    },
+    "surprise": {
+      "_comment": "惊讶：意外转折、反差、'竟然/没想到'",
+      "moves": [
+        {"move": "surprised1", "weight": 0.50},
+        {"move": "surprised2", "weight": 0.50}
+      ]
+    },
+    "fear": {
+      "_comment": "紧张担忧：危险将至、替人担心、紧张不安",
+      "moves": [
+        {"move": "scared1", "weight": 0.35},
+        {"move": "anxiety1", "weight": 0.33},
+        {"move": "fear1", "weight": 0.32}
+      ]
+    },
+    "negate": {
+      "_comment": "否定拒绝：核心是'不/不是/不行/不同意'，语气平静",
+      "moves": [
+        {"move": "no1", "weight": 0.25},
+        {"move": "no_sad1", "weight": 0.20},
+        {"move": "no_excited1", "weight": 0.18},
+        {"move": "displeased1", "weight": 0.15},
+        {"move": "displeased2", "weight": 0.12},
+        {"move": "downcast1", "weight": 0.10}
+      ]
+    },
+    "annoy": {
+      "_comment": "不满恼火：被冒犯、批评指责、强烈不满。强烈动作权重 ≤0.05",
+      "moves": [
+        {"move": "irritated1", "weight": 0.20},
+        {"move": "irritated2", "weight": 0.18},
+        {"move": "reprimand1", "weight": 0.15},
+        {"move": "reprimand2", "weight": 0.12},
+        {"move": "reprimand3", "weight": 0.10},
+        {"move": "impatient1", "weight": 0.10},
+        {"move": "impatient2", "weight": 0.08},
+        {"move": "contempt1", "weight": 0.04},
+        {"move": "disgusted1", "weight": 0.03},
+        {"move": "furious1", "weight": 0.00},
+        {"move": "rage1", "weight": 0.00}
+      ]
+    },
+    "sad": {
+      "_comment": "悲伤低落：难过、遗憾、离别、共情对方的痛",
+      "moves": [
+        {"move": "sad1", "weight": 0.30},
+        {"move": "sad2", "weight": 0.28},
+        {"move": "lonely1", "weight": 0.22},
+        {"move": "resigned1", "weight": 0.20}
+      ]
+    },
+    "warm": {
+      "_comment": "温暖安抚：问候、感谢、安慰、欢迎、表达好感",
+      "moves": [
+        {"move": "grateful1", "weight": 0.20},
+        {"move": "loving1", "weight": 0.18},
+        {"move": "welcoming1", "weight": 0.16},
+        {"move": "welcoming2", "weight": 0.16},
+        {"move": "serenity1", "weight": 0.15},
+        {"move": "calming1", "weight": 0.10},
+        {"move": "relief1", "weight": 0.05},
+        {"move": "relief2", "weight": 0.00}
+      ]
+    },
+    "awkward": {
+      "_comment": "尴尬歉意：自己出错、道歉、不好意思",
+      "moves": [
+        {"move": "oops1", "weight": 0.25},
+        {"move": "oops2", "weight": 0.25},
+        {"move": "shy1", "weight": 0.30},
+        {"move": "uncomfortable1", "weight": 0.20}
+      ]
+    }
+  },
+  "_idle_pool": {
+    "_comment": "长沉默待机注入（裁定 §2.1）：分层池，权重为初值。waiting 因未过本机肉眼验收，权重暂设 0（份额给 serenity1）。",
+    "_rules": {
+      "1": "底座=呼吸感，永远在（程序化 idle，见 templates.py）",
+      "2": "点缀=稀疏注入+冷却≥20s（插完必回纯呼吸）",
+      "3": "困意随间隙时长升级（15~30s/30~60s/>60s）"
+    },
+    "15_30s": [
+      {"move": "serenity1", "weight": 0.38},
+      {"move": "thoughtful2", "weight": 0.27},
+      {"move": "waiting", "weight": 0.00, "note": "未过验收，份额暂给 serenity1"},
+      {"move": "tired1", "weight": 0.35}
+    ],
+    "30_60s": [
+      {"move": "curious1", "weight": 0.20},
+      {"move": "lonely1", "weight": 0.20},
+      {"move": "tired1", "weight": 0.40},
+      {"move": "serenity1", "weight": 0.20}
+    ],
+    "over_60s": [
+      {"move": "boredom1", "weight": 1.0, "note": "同间隙再注入时升级 boredom2"}
+    ],
+    "boredom_upgrade": "boredom2"
+  },
+  "_excluded": {
+    "_comment": "移出标注词表的 17 个（裁定 §2）：不入训练，但保留待机类（_idle_pool）",
+    "moves": [
+      "boredom1", "boredom2", "sleep1", "tired1", "exhausted1",
+      "mini-deep-sleep", "wake-mini-up", "toc-toc-toc", "electric1", "dying1",
+      "dance1", "dance2", "dance3", "go_away1", "impatient1", "impatient2", "indifferent1"
+    ]
+  }
+}

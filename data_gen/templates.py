@@ -67,11 +67,19 @@ def backchannel_nods(duration_s, speech_spans, rng):
     T = _T(duration_s)
     traj = np.zeros((T,9), dtype=np.float32)
     for (s, e) in speech_spans:
+        # 确保 speech_span 不超出 duration_s
+        e = min(e, duration_s)
+        if e <= s:
+            continue
         t = s + rng.uniform(0.5, 2.0)
         while t < e - 1.0:
             nod, _ = render_template("nod", 1.5, rng, {"amp": rng.uniform(0.05,0.10)})
             i = int(t*FPS)
+            if i >= T:
+                break
             n = min(len(nod), T - i)
+            if n <= 0:
+                break
             traj[i:i+n] += nod[:n]
             t += rng.uniform(2.0, 5.0)
     return traj
