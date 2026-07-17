@@ -382,9 +382,15 @@ def _process_one(args) -> Tuple[str, bool, str]:
     sample, out_dir, quarantine_dir, seed, cluster_map, explain_seed = args
     ep_id = f"ep_{sample.get('video_id', sample.get('video_name', 'unknown'))}"
     ep_path = Path(out_dir) / ep_id
-    # 增量:已存在且校验通过则跳过
-    if ep_path.exists() and validate_episode(ep_path):
-        return ep_id, True, "skip(已存在)"
+    # 增量:已存在且校验通过则跳过（捕获异常以防损坏文件）
+    if ep_path.exists():
+        try:
+            if validate_episode(ep_path):
+                return ep_id, True, "skip(已存在)"
+        except Exception:
+            # 损坏文件，删除后重新生成
+            import shutil
+            shutil.rmtree(ep_path)
     try:
         rng = np.random.default_rng(seed)
         meta, timeline, actions = convert_sample(
