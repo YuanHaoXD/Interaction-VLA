@@ -452,26 +452,70 @@ def collect_json_files(path):
 # ── 流式输出 / 断点续跑（JSONL 工作文件）──
 # 标注时把每个已完成 sample 以「一行一个 compact JSON」追加进 <out>.jsonl 工作文件
 # （崩溃安全、可按行续跑）；整文件跑完再流式合成下游要的 .json 数组，然后删掉工作文件。
+def _count_billable(sample):
+    """一个 sample 里【会真花钱】的 response 数(delegation 不调 API,不计费)。"""
+    return sum(1 for _i, d in iter_response_dicts(sample.get("response", []))
+               if not is_delegation(d.get("content", "")))
+
+
 def _resume_from_jsonl(work_path):
-    """数工作文件里已完成的 sample 行数，并截断掉崩溃留下的半截尾行。返回已完成数。"""
+    """数工作文件里已完成的 sample / 计费 response 数，并截断崩溃留下的半截尾行。
+
+    返回 (n_samples, n_responses)。
+    """
     if not work_path.exists():
-        return 0
-    n = 0
+        return 0, 0
+    n = nr = 0
     good_bytes = 0
     with open(work_path, "rb") as f:
         for raw in f:
             try:
-                json.loads(raw)          # 完整的一行 = 一个已标 sample
+                s = json.loads(raw)      # 完整的一行 = 一个已标 sample
             except Exception:
                 break                    # 半截尾行（写到一半崩了），丢弃
             n += 1
+            nr += _count_billable(s)
             good_bytes += len(raw)
     with open(work_path, "r+b") as f:    # 截断残缺尾巴，保证可安全追加
         f.truncate(good_bytes)
-    return n
+    return n, nr
 
 
-def _finalize_to_json_array(work_path, out_path):
+# ── 完成回执 sidecar ──
+# 续跑时若某文件已整份跑完(.json 存在),必须把它已消耗的配额【计入】,否则重跑会给后续文件
+# 全额配额 → 突破 --response_limit 预算。sidecar 让这一步 O(1),无需重新解析大 .json。
+def _done_sidecar(out_path):
+    return Path(str(out_path) + ".done.json")
+
+
+def _write_done_sidecar(out_path, n_samples, n_responses):
+    _done_sidecar(out_path).write_text(
+        json.dumps({"samples": n_samples, "responses": n_responses}), encoding="utf-8")
+
+
+def _read_done_sidecar(out_path):
+    p = _done_sidecar(out_path)
+    if p.exists():
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            return int(d["samples"]), int(d["responses"])
+        except Exception:
+            pass
+    return None
+
+
+def _count_done_json(out_path):
+    """老产物没 sidecar 时的回退:流式数一遍已完成 .json(只 I/O,不调 API)。"""
+    import ijson
+    ns = nr = 0
+    with open(out_path, "rb") as f:
+        for s in ijson.items(f, "item"):
+            ns += 1
+            nr += _count_billable(s)
+    return ns, nr
+
+
+def _finalize_to_json_array(work_path, out_path, n_samples=None, n_responses=None):
     """把 JSONL 工作文件流式合成为下游要的 .json 数组（O(1) 内存），成功后删掉工作文件。"""
     with open(work_path, "rb") as fin, open(out_path, "w", encoding="utf-8") as fout:
         fout.write("[")
@@ -484,12 +528,16 @@ def _finalize_to_json_array(work_path, out_path):
             first = False
         fout.write("\n]" if not first else "]")
     work_path.unlink()
+    if n_samples is not None:            # 写完成回执,供续跑计入配额
+        _write_done_sidecar(out_path, n_samples, n_responses or 0)
 
 
 class Stats:
     """跨文件累计的计数器。"""
     def __init__(self):
-        self.processed = 0            # 本 run 新标注的 sample 数
+        self.processed = 0            # 累计 sample 数(含续跑已完成的,用于配额)
+        self.responses = 0            # 累计【计费】response 数(含续跑已完成的,用于 --response_limit)
+        self.new_responses = 0        # 本 run 新标注的计费 response 数(用于成本核算)
         self.skipped_done = 0         # 续跑跳过的已完成 sample 数
         self.skipped_delegation = 0
         self.llm_calls = 0
@@ -508,28 +556,44 @@ def process_file_streaming(fp, rel, out_path, args, stats):
 
     work_path = Path(str(out_path) + ".jsonl")
 
-    # 最终 .json 已存在 = 上一轮已整文件跑完，跳过（--no_resume 例外）
+    # 最终 .json 已存在 = 上一轮已整文件跑完 → 跳过，但【必须把它消耗的配额计入】，
+    # 否则续跑会给后续文件全额配额，突破 --response_limit 预算。
     if out_path.exists() and not args.no_resume:
-        print(f"[annotate] {rel} 已完成(.json 存在)，跳过", flush=True)
+        got = _read_done_sidecar(out_path)
+        if got is None:                       # 老产物无回执 → 流式数一遍并补写
+            got = _count_done_json(out_path)
+            _write_done_sidecar(out_path, *got)
+        stats.processed += got[0]
+        stats.responses += got[1]
+        stats.skipped_done += got[0]
+        print(f"[annotate] {rel} 已完成(.json 存在)，跳过"
+              f"（计入配额: {got[0]} sample / {got[1]} response）", flush=True)
         return
-    if args.no_resume and work_path.exists():
-        work_path.unlink()
+    if args.no_resume:
+        if work_path.exists():
+            work_path.unlink()
+        _done_sidecar(out_path).unlink(missing_ok=True)
 
-    n_done = 0 if args.no_resume else _resume_from_jsonl(work_path)
+    n_done, r_done = (0, 0) if args.no_resume else _resume_from_jsonl(work_path)
     stats.skipped_done += n_done
+    stats.processed += n_done
+    stats.responses += r_done
     if n_done:
-        print(f"[annotate] 断点续跑: 已完成 {n_done} 个 sample，跳过", flush=True)
+        print(f"[annotate] 断点续跑: 已完成 {n_done} sample / {r_done} response，跳过",
+              flush=True)
 
-    remaining = None
-    if args.sample_limit:
-        # 续跑时已完成的 n_done 也占 sample_limit 额度，否则会超标。
-        remaining = args.sample_limit - stats.processed - n_done
-        if remaining <= 0:
-            # 额度已用尽：把已有工作文件收尾成 .json 再返回（别把 n_done 丢在 jsonl 里）
-            if work_path.exists():
-                _finalize_to_json_array(work_path, out_path)
-                stats.processed += n_done
-            return
+    # 额度检查(sample 与 response 双闸,任一用尽即收尾)
+    def _quota_left():
+        s_left = (args.sample_limit - stats.processed) if args.sample_limit else None
+        r_left = (args.response_limit - stats.responses) if args.response_limit else None
+        return s_left, r_left
+
+    s_left, r_left = _quota_left()
+    if (s_left is not None and s_left <= 0) or (r_left is not None and r_left <= 0):
+        # 额度已用尽：把已有工作文件收尾成 .json 再返回（别把 n_done 丢在 jsonl 里）
+        if work_path.exists():
+            _finalize_to_json_array(work_path, out_path, n_done, r_done)
+        return
 
     pool = ThreadPoolExecutor(max_workers=args.max_workers)
     fout = open(work_path, "ab")
@@ -578,30 +642,41 @@ def process_file_streaming(fp, rel, out_path, args, stats):
         buffer = []
 
     skipped = 0
+    new_responses = 0
     try:
         with open(fp, "rb") as fin:
             for s in ijson.items(fin, "item"):
                 if skipped < n_done:                 # 跳过上一轮已完成的前 n_done 个
                     skipped += 1
                     continue
-                if remaining is not None and new_count >= remaining:
+                s_left, r_left = _quota_left()
+                if s_left is not None and s_left <= 0:
                     break
                 if args.per_file_limit and (n_done + new_count) >= args.per_file_limit:
                     break
+                # response 配额是【硬预算闸】:先数这个 sample 要花多少条,超了就停(不半途切样本)
+                need = _count_billable(s)
+                if r_left is not None and need > r_left:
+                    break
                 buffer.append(s)
                 new_count += 1
+                new_responses += need
+                stats.processed += 1
+                stats.responses += need
                 if len(buffer) >= CHUNK_SAMPLES:
                     flush_chunk()
-                    print(f"[annotate]   已处理 {n_done + new_count} sample "
-                          f"(LLM {stats.llm_calls})...", flush=True)
+                    print(f"[annotate]   已处理 {n_done + new_count} sample / "
+                          f"{r_done + new_responses} response (批调用 {stats.llm_calls})...",
+                          flush=True)
         flush_chunk()
     finally:
         pool.shutdown()
         fout.close()
 
-    _finalize_to_json_array(work_path, out_path)
-    stats.processed += new_count
-    print(f"[annotate] 已保存 -> {out_path}  (本文件共 {n_done + new_count} sample)",
+    stats.new_responses += new_responses
+    _finalize_to_json_array(work_path, out_path, n_done + new_count, r_done + new_responses)
+    print(f"[annotate] 已保存 -> {out_path}  "
+          f"(本文件共 {n_done + new_count} sample / {r_done + new_responses} response)",
           flush=True)
 
 
@@ -668,6 +743,9 @@ def main():
                     help="只处理这些 task_type 子目录")
     ap.add_argument("--sample_limit", type=int, default=0,
                     help="限制总 sample 数(0=不限)")
+    ap.add_argument("--response_limit", type=int, default=0,
+                    help="限制总【计费 response】数(0=不限)。这是硬预算闸——成本按 response 算,"
+                         "续跑时已完成文件的消耗也会计入,重跑不会突破。")
     ap.add_argument("--per_file_limit", type=int, default=0,
                     help="每个文件最多处理 N 条(0=不限)")
     ap.add_argument("--max_workers", type=int, default=MAX_WORKERS,
@@ -688,6 +766,9 @@ def main():
           f"关思考={'是(budget=%d)' % THINKING_BUDGET if THINK_OFF else '否'}  "
           f"reasoning_effort={REASONING_EFFORT or '(未发送)'}  并发={args.max_workers}",
           flush=True)
+    if args.response_limit:
+        print(f"[annotate] 预算闸: response_limit={args.response_limit:,} "
+              f"(≈${args.response_limit * 0.000348:,.0f}，续跑已完成部分计入)", flush=True)
 
     files = collect_json_files(in_root)
     if args.task_types:
@@ -702,6 +783,9 @@ def main():
     for fp in files:
         if args.sample_limit and stats.processed >= args.sample_limit:
             print("[annotate] 已达 sample_limit，停止", flush=True)
+            break
+        if args.response_limit and stats.responses >= args.response_limit:
+            print(f"[annotate] 已达 response_limit({stats.responses:,})，停止", flush=True)
             break
         # --input 指到单个文件时，relative_to(自身) 会得到 "."，输出路径就错了；
         # 此时用文件名做 rel，输出为 <output>/<文件名>。
@@ -721,10 +805,13 @@ def main():
     label_counter = stats.labels
     status_counter = stats.status
     print("\n=== 标注完成 ===", flush=True)
-    print(f"处理 samples: {total_processed}", flush=True)
+    print(f"累计 samples(含续跑已完成): {total_processed}", flush=True)
+    print(f"累计计费 response(配额口径):  {stats.responses}", flush=True)
+    print(f"  其中【本 run 新标】response: {stats.new_responses}  "
+          f"(≈${stats.new_responses * 0.000348:,.2f})", flush=True)
     print(f"跳过(续跑已完成 sample): {total_skipped_done}", flush=True)
-    print(f"跳过(delegation→none): {total_skipped_delegation}", flush=True)
-    print(f"LLM 调用数:   {total_llm_calls}", flush=True)
+    print(f"跳过(delegation→哨兵,不计费): {total_skipped_delegation}", flush=True)
+    print(f"批调用数:   {total_llm_calls}", flush=True)
     print(f"question/response 长度不一致的 sample 数: {total_len_mismatch}",
           flush=True)
     if mismatch_examples:
